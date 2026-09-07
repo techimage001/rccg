@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /
+# TESTING RELEASE: keep this file while using the temporary Hostinger domain.
+# Replace for production only after switching rccg_fife_private/config.php to environment=production.

@@ -1,0 +1,37 @@
+RCCG OPEN HEAVENS FIFE — QA REPORT
+==================================
+
+Release target: temporary Hostinger domain
+Primary UX: mobile-first, then tablet and desktop
+
+AUTOMATED / STATIC CHECKS INCLUDED
+- PHP syntax lint for every PHP file
+- JavaScript syntax validation with Node
+- Discovery Class terminology sweep: no "Sunday School" strings allowed
+- Private-data placement check: SQLite/config outside public_html
+- Bank details and church URLs not hard-coded into public HTML
+- Future Discovery Class lessons present in seed database
+- Student + Teacher manual fields present
+- Date picker present for past/current/future lessons
+- Donation control present in mobile and desktop navigation surfaces
+- Share and bookmark controls present in reading experiences
+- PWA manifest and service worker present
+- Mobile/tablet/desktop CSS breakpoints present
+- 44px minimum interactive control sizing in core button styles
+- Facebook/YouTube/website/Zoom rendered as external links that open separately
+- Contact forms capture full name, email, phone, category and message
+- Temporary domain noindex/robots block present
+- Admin dashboard is not advertised in public navigation
+
+SERVER-DEPENDENT TESTS STILL REQUIRED AFTER HOSTINGER UPLOAD
+- PDO SQLite extension enabled
+- PHP can write to rccg_fife_private/rccg.sqlite
+- SMTP credentials send verification email
+- Verification link sets secure browser cookie
+- Contact submission is stored and notification email is delivered
+- PWA installation prompt on real Android/iOS browsers
+- Real-device audio speech support (varies by browser/OS)
+- Facebook/YouTube/Zoom handoff behaviour on the user's exact device/browser
+
+NOTE
+This environment can lint and inspect the release, but it does not have PHP PDO-SQLite enabled, so the full PHP+SQLite runtime cannot be executed end-to-end here. Hostinger runtime checks are therefore explicitly listed above and must be run immediately after upload.
