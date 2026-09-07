@@ -14,7 +14,7 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
   <link rel="manifest" href="site.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="assets/app.css?v=3">
+  <link rel="stylesheet" href="assets/app.css?v=5">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -66,7 +66,7 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
         <div id="discoveryBrowse">
           <div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / Discovery Class</div>
           <div class="section-head"><div><h1 class="page-title">Discovery Class</h1><p class="lede">Student and Teacher manuals, including past and future lessons from the private yearly manual folder.</p></div></div>
-          <div class="subnav"><button class="btn btn-primary" id="browseStudent">Student Manual</button><button class="btn" id="browseTeacher">Teacher Manual</button><button class="btn" id="pastLessons">Past Lessons</button><button class="btn" id="futureLessons">Future Lessons</button></div>
+          <div class="subnav" aria-label="Discovery Class navigation"><button class="btn btn-primary" id="browseStudent" type="button">Student Manual</button><button class="btn" id="browseTeacher" type="button">Teacher Manual</button><button class="btn" id="tocButton" type="button">Table of Contents</button><button class="btn" id="pastLessons" type="button">Past Lessons</button><button class="btn" id="futureLessons" type="button">Future Lessons</button><button class="btn" id="allLessons" type="button">All Lessons</button></div>
           <div class="manual-year-row"><label for="manualYear"><strong>Manual year</strong></label><select id="manualYear" aria-label="Discovery Class manual year"></select><span id="manualSourceStatus" class="help"></span></div>
           <section class="section calendar-wrap">
             <div class="card calendar-card"><h2>Choose a lesson date</h2><p class="lede">Pick any Sunday — past, current or future.</p><input id="lessonDate" type="date"><p id="lessonDateStatus" class="help"></p><p class="help">The annual schedule shows all verified lesson dates and titles. Full Student or Teacher content opens when it has been loaded into the private manual folder.</p></div>
@@ -74,13 +74,13 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
               <div class="section-head"><div><h2>Table of Contents</h2><p class="lede">Tap any lesson to open it directly.</p></div></div>
               <div class="toc-wrap"><table class="toc-table"><thead><tr><th scope="col">Lesson</th><th scope="col">Date</th><th scope="col">Title</th></tr></thead><tbody id="lessonToc"></tbody></table></div>
             </div>
-            <div><h2>Browse Lessons</h2><div class="lesson-list" id="lessonList"></div></div>
+            <div id="browseLessonsSection"><div class="section-head"><div><h2>Browse Lessons</h2><p class="help" id="lessonFilterStatus" aria-live="polite"></p></div></div><div class="lesson-list" id="lessonList"></div></div>
           </section>
         </div>
         <div id="lessonView" style="display:none"></div>
       </section>
 
-      <section class="page-panel" data-page="whats-on"><div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / What's On</div><div class="section-head"><div><h1 class="page-title">What's On</h1><p class="lede">Upcoming church activities, automatically surfaced from the private content database.</p></div></div><div class="section lesson-list" id="eventsList"></div></section>
+      <section class="page-panel" data-page="whats-on"><div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / What's On</div><div class="section-head"><div><h1 class="page-title">What's On</h1><p class="lede">Browse church activities by month. Times use Scotland/UK local time and follow BST/GMT automatically.</p></div></div><div class="event-month-controls"><button class="btn" id="eventPrevMonth" type="button" aria-label="Previous month">←</button><label for="eventMonth"><strong>Month</strong></label><input id="eventMonth" type="month"><button class="btn" id="eventNextMonth" type="button" aria-label="Next month">→</button><button class="btn" id="eventThisMonth" type="button">This month</button></div><div class="section lesson-list" id="eventsList"></div></section>
 
       <section class="page-panel" data-page="service-times"><div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / Service Times</div><div class="section-head"><div><h1 class="page-title">Service Times</h1><p class="lede">Sunday, Wednesday and monthly programme.</p></div></div><div class="section lesson-list" id="serviceTimes"></div></section>
 
@@ -91,7 +91,7 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
   </div>
 
   <div class="floating-actions" aria-label="Quick contact">
-    <a class="whatsapp-fab" id="whatsappFab" href="#" data-external aria-label="WhatsApp RCCG Open Heavens Fife" title="WhatsApp us">💬</a>
+    <a class="whatsapp-fab" id="whatsappFab" href="#" data-external aria-label="Speak to Pastor Joseph on WhatsApp" title="Speak to Pastor Joseph on WhatsApp"><span aria-hidden="true">💬</span><span>Speak to Pastor Joseph</span></a>
     <button class="prayer-fab" data-route="form/prayer" type="button">🙏 Prayer Request</button>
   </div>
   <nav class="bottom-nav" aria-label="Mobile navigation">
@@ -116,7 +116,7 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
   <div class="modal" id="installModal"><div class="modal-card"><h2>Install or save RCCG Open Heavens Fife</h2><div id="installHelp"></div><div class="modal-actions"><button class="btn" id="closeInstall">Close</button></div></div></div>
   <div class="modal" id="signupModal"><div class="modal-card"><h2>Stay connected with RCCG Open Heavens Fife</h2><p>Receive devotional and important church updates. Verify your email to keep this browser recognised.</p><form id="signupForm" class="form-grid"><input id="signupWebsite" name="company" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px"><input id="signupStarted" type="hidden"><div class="field"><label for="signupEmail">Email address</label><input id="signupEmail" type="email" required></div><button class="btn btn-primary" type="submit">Continue</button><p id="signupStatus" class="status" aria-live="polite"></p></form><div class="modal-actions"><button class="btn" id="signupClose">Not now</button></div></div></div>
 </div>
-<script src="assets/app.js?v=3" defer></script>
+<script src="assets/app.js?v=5" defer></script>
 <script>document.addEventListener('DOMContentLoaded',()=>{document.getElementById('mobileMore')?.addEventListener('click',()=>document.getElementById('drawer').classList.add('open'));document.querySelectorAll('[data-route]').forEach(()=>{});});</script>
 </body>
 </html>

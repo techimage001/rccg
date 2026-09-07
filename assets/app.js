@@ -1,7 +1,7 @@
 (() => {
   const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
   const API='api/';
-  const state={content:null,route:'home',lessonMode:'student',currentLesson:null,currentBody:null,lessonFilter:'all',signupShown:false};
+  const state={content:null,route:'home',lessonMode:'student',currentLesson:null,currentBody:null,lessonFilter:'all',signupShown:false,eventMonth:null,audio:{chunks:[],index:0,utterance:null,playing:false,paused:false}};
   const store={get(k,d){try{return JSON.parse(localStorage.getItem('rccg_'+k))??d}catch{return d}},set(k,v){localStorage.setItem('rccg_'+k,JSON.stringify(v))}};
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmtDate=d=>new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(d+'T12:00:00'));
@@ -58,7 +58,7 @@
     const hero=$('#todayHero');
     if(c.today_devotional){
       hero.innerHTML=`<div class="eyebrow">Today's Devotional</div><h1>${esc(c.today_devotional.title)}</h1><p>${esc(c.today_devotional.summary||'Grow daily in God\'s Word with a calm, focused reading experience.')}</p><div class="hero-actions"><button class="btn" id="heroListen">🎧 Listen</button><button class="btn" data-route="read">📖 Read Devotional</button><button class="btn" data-route="form/prayer">🙏 Prayer Request</button></div>`;
-      $('#heroListen')?.addEventListener('click',()=>speakText(c.today_devotional.body||c.today_devotional.summary||c.today_devotional.title));
+      $('#heroListen')?.addEventListener('click',()=>speakText(c.today_devotional.body||c.today_devotional.summary||c.today_devotional.title,c.today_devotional.title));
     }
     renderHomeTiles();renderNext();renderRead();renderChurchInfo();setQuickLinks();renderManualYear();
   }
@@ -66,7 +66,13 @@
   function setQuickLinks(){
     const s=state.content?.settings||{};
     const wa=(s.whatsapp||'').replace(/\D/g,'');
-    if(wa){const a=$('#whatsappFab');if(a)a.href='https://wa.me/'+wa}
+    if(wa){
+      const a=$('#whatsappFab');
+      if(a){
+        const msg=encodeURIComponent("Hello Pastor Joseph, I'm contacting you from the RCCG Open Heavens Fife WebApp.");
+        a.href='https://wa.me/'+wa+'?text='+msg;
+      }
+    }
   }
 
   function renderHomeTiles(){
@@ -89,7 +95,7 @@
     const c=state.content?.today_devotional,el=$('#readerContent');if(!el)return;
     if(!c){el.innerHTML='<div class="empty">No devotional published for today yet.</div>';return}
     el.innerHTML=`<div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / Today's Devotional</div><h1 class="page-title">${esc(c.title)}</h1><div class="reader-toolbar"><button class="btn btn-soft" id="readListen">🎧 Listen</button><button class="btn" id="readBookmark">🔖 Bookmark</button><button class="btn" id="readShare">↗ Share</button><button class="btn" id="fontUp">A+</button><button class="btn" id="fontDown">A−</button></div><article class="reader" id="devotionalBody"><section><h3>Memory Verse</h3><div class="verse">${esc(c.memory_verse||'')}</div></section><section><h3>Bible Reading</h3><p>${esc(c.bible_reading||'')}</p></section><section><h3>Devotional</h3><p>${esc(c.body||'')}</p></section></article>`;
-    $('#readListen').onclick=()=>speakText([c.title,c.memory_verse,c.body].join('. '));
+    $('#readListen').onclick=()=>speakText([c.title,c.memory_verse,c.body].filter(Boolean).join('. '),c.title);
     $('#readBookmark').onclick=()=>toggleBookmark('devotional:'+c.id,{type:'devotional',id:c.id,title:c.title});
     $('#readShare').onclick=()=>sharePage(c.title,location.origin+location.pathname+'#/read');
     $('#fontUp').onclick=()=>changeReaderFont(1);$('#fontDown').onclick=()=>changeReaderFont(-1);
@@ -107,49 +113,44 @@
     sel.innerHTML=years.map(y=>`<option ${y===state.content.active_manual_year?'selected':''}>${esc(y)}</option>`).join('');
     sel.onchange=()=>loadManualYear(sel.value);
     const st=$('#manualSourceStatus');if(st)st.textContent=state.content.manual_meta?.source_status||'';
-    $('#browseStudent')?.addEventListener('click',()=>{state.lessonMode='student';setBrowseModeButtons();});
-    $('#browseTeacher')?.addEventListener('click',()=>{state.lessonMode='teacher';setBrowseModeButtons();});
-    $('#pastLessons')?.addEventListener('click',()=>{state.lessonFilter='past';renderDiscovery();});
-    $('#futureLessons')?.addEventListener('click',()=>{state.lessonFilter='future';renderDiscovery();});
+    $('#browseStudent').onclick=()=>{state.lessonMode='student';setBrowseModeButtons();renderDiscovery();};
+    $('#browseTeacher').onclick=()=>{state.lessonMode='teacher';setBrowseModeButtons();renderDiscovery();};
+    $('#tocButton').onclick=()=>{state.lessonFilter='all';renderDiscovery();requestAnimationFrame(()=>$('#lessonToc')?.closest('.toc-section')?.scrollIntoView({behavior:'smooth',block:'start'}));};
+    $('#pastLessons').onclick=()=>{state.lessonFilter='past';renderDiscovery();requestAnimationFrame(()=>$('#browseLessonsSection')?.scrollIntoView({behavior:'smooth',block:'start'}));};
+    $('#futureLessons').onclick=()=>{state.lessonFilter='future';renderDiscovery();requestAnimationFrame(()=>$('#browseLessonsSection')?.scrollIntoView({behavior:'smooth',block:'start'}));};
+    $('#allLessons').onclick=()=>{state.lessonFilter='all';renderDiscovery();requestAnimationFrame(()=>$('#browseLessonsSection')?.scrollIntoView({behavior:'smooth',block:'start'}));};
+    setBrowseModeButtons();
   }
   function setBrowseModeButtons(){
     $('#browseStudent')?.classList.toggle('btn-primary',state.lessonMode==='student');
     $('#browseTeacher')?.classList.toggle('btn-primary',state.lessonMode==='teacher');
+    for(const [id,val] of [['pastLessons','past'],['futureLessons','future'],['allLessons','all']]){
+      const el=$('#'+id);if(el){el.classList.toggle('filter-active',state.lessonFilter===val);el.setAttribute('aria-pressed',String(state.lessonFilter===val));}
+    }
   }
 
   function renderDiscovery(){
-    const allLessons=(state.content?.discovery_lessons||[]).slice().sort((a,b)=>a.lesson_date.localeCompare(b.lesson_date));
+    const allLessons=(state.content?.discovery_lessons||[]).slice().sort((a,b)=>String(a.lesson_date).localeCompare(String(b.lesson_date)));
     let lessons=allLessons.slice();
     const list=$('#lessonList');if(!list)return;
-    const today=new Intl.DateTimeFormat('en-CA',{timeZone:state.content?.timezone||'Europe/London',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-    if(state.lessonFilter==='past')lessons=lessons.filter(l=>l.lesson_date<today);
-    if(state.lessonFilter==='future')lessons=lessons.filter(l=>l.lesson_date>today);
+    const today=(state.content?.server_now||new Date().toISOString()).slice(0,10);
+    if(state.lessonFilter==='past')lessons=lessons.filter(l=>String(l.lesson_date).slice(0,10)<today);
+    if(state.lessonFilter==='future')lessons=lessons.filter(l=>String(l.lesson_date).slice(0,10)>today);
+    const status=$('#lessonFilterStatus');
+    if(status){const label=state.lessonFilter==='past'?'past':state.lessonFilter==='future'?'future':'all';status.textContent=`Showing ${lessons.length} ${label} lesson${lessons.length===1?'':'s'} for ${state.content?.active_manual_year||''}.`;}
     const picker=$('#lessonDate');
-    if(picker&&!picker.dataset.bound){picker.dataset.bound='1';picker.addEventListener('change',()=>{const m=(state.content?.discovery_lessons||[]).find(x=>x.lesson_date===picker.value);if(m)route('discovery/lesson/'+m.lesson_number);else $('#lessonDateStatus').textContent='No Discovery Class lesson is scheduled for that date.';});}
-
+    if(picker){
+      if(allLessons.length){picker.min=allLessons[0].lesson_date;picker.max=allLessons[allLessons.length-1].lesson_date;}
+      if(!picker.dataset.bound){picker.dataset.bound='1';picker.addEventListener('change',()=>{const chosen=String(picker.value||'').slice(0,10);const m=(state.content?.discovery_lessons||[]).find(x=>String(x.lesson_date).slice(0,10)===chosen);const st=$('#lessonDateStatus');if(m){if(st)st.textContent=`Lesson ${m.lesson_number}: ${m.title}`;route('discovery/lesson/'+m.lesson_number);}else if(st)st.textContent='No Discovery Class lesson is scheduled for that date.';});}
+    }
     const toc=$('#lessonToc');
     if(toc){
-      const quarterLabel=n=>n<=13?'First Quarter':n<=26?'Second Quarter':n<=39?'Third Quarter':'Fourth Quarter';
-      let lastQuarter='';
-      toc.innerHTML=allLessons.map(l=>{
-        const q=quarterLabel(Number(l.lesson_number));
-        const separator=q!==lastQuarter?`<tr class="quarter-row"><th colspan="3" scope="rowgroup">${q}</th></tr>`:'';
-        lastQuarter=q;
-        const date=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(l.lesson_date+'T12:00:00Z'));
-        const routeName='discovery/lesson/'+l.lesson_number;
-        return `${separator}<tr class="toc-lesson-row" data-toc-lesson="${l.lesson_number}"><td><a href="#/${routeName}" data-route="${routeName}" aria-label="Open Lesson ${esc(l.lesson_number)}: ${esc(l.title)}">Lesson ${esc(l.lesson_number)}</a></td><td><a href="#/${routeName}" data-route="${routeName}" tabindex="-1">${esc(date)}</a></td><td><a href="#/${routeName}" data-route="${routeName}" tabindex="-1"><strong>${esc(l.title)}</strong></a></td></tr>`;
-      }).join('');
-      $$('[data-toc-lesson]',toc).forEach(row=>row.addEventListener('click',e=>{if(e.target.closest('a'))return;route('discovery/lesson/'+row.dataset.tocLesson);}));
+      const quarterLabel=n=>n<=13?'First Quarter':n<=26?'Second Quarter':n<=39?'Third Quarter':'Fourth Quarter';let lastQuarter='';
+      toc.innerHTML=allLessons.map(l=>{const q=quarterLabel(Number(l.lesson_number));const separator=q!==lastQuarter?`<tr class="quarter-row"><th colspan="3" scope="rowgroup">${q}</th></tr>`:'';lastQuarter=q;const date=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(String(l.lesson_date).slice(0,10)+'T12:00:00Z'));const routeName='discovery/lesson/'+l.lesson_number;return `${separator}<tr class="toc-lesson-row" data-toc-lesson="${l.lesson_number}"><td><a href="#/${routeName}" data-route="${routeName}" aria-label="Open Lesson ${esc(l.lesson_number)}: ${esc(l.title)}">Lesson ${esc(l.lesson_number)}</a></td><td><a href="#/${routeName}" data-route="${routeName}" tabindex="-1">${esc(date)}</a></td><td><a href="#/${routeName}" data-route="${routeName}" tabindex="-1"><strong>${esc(l.title)}</strong></a></td></tr>`;}).join('');
+      $$('[data-toc-lesson]',toc).forEach(row=>row.onclick=e=>{if(e.target.closest('a'))return;route('discovery/lesson/'+row.dataset.tocLesson);});
     }
-
-    list.innerHTML=lessons.map(l=>{
-      const kind=l.lesson_date<today?'Past':l.lesson_date===today?'Current':'Future';
-      const available=state.lessonMode==='teacher'?l.teacher_available:l.student_available;
-      const availText=available?'Manual available':'Schedule verified';
-      return `<button class="lesson-item ${kind.toLowerCase()}" data-lesson="${l.lesson_number}"><span>📘</span><span><strong>Lesson ${esc(l.lesson_number)} — ${esc(l.title)}</strong><small>${fmtDate(l.lesson_date)}</small><span class="status-pill">${kind}</span> <span class="status-pill ${available?'available':'schedule'}">${availText}</span></span></button>`;
-    }).join('')||'<div class="empty">No lessons match this filter.</div>';
-    $$('[data-lesson]',list).forEach(b=>b.onclick=()=>route('discovery/lesson/'+b.dataset.lesson));
-    setBrowseModeButtons();
+    list.innerHTML=lessons.map(l=>{const d=String(l.lesson_date).slice(0,10);const kind=d<today?'Past':d===today?'Current':'Future';const available=state.lessonMode==='teacher'?l.teacher_available:l.student_available;const availText=available?'Manual available':'Schedule verified';return `<button class="lesson-item ${kind.toLowerCase()}" type="button" data-lesson="${l.lesson_number}"><span>📘</span><span><strong>Lesson ${esc(l.lesson_number)} — ${esc(l.title)}</strong><small>${fmtDate(d)}</small><span class="status-pill">${kind}</span> <span class="status-pill ${available?'available':'schedule'}">${availText}</span></span></button>`;}).join('')||'<div class="empty">No lessons match this filter.</div>';
+    $$('[data-lesson]',list).forEach(b=>b.onclick=()=>route('discovery/lesson/'+b.dataset.lesson));setBrowseModeButtons();
   }
 
   async function openLesson(number){
@@ -186,10 +187,10 @@
     const bodyHtml=body.available
       ? sections.map(([h,b,kind])=>`<section><h3>${esc(h)}</h3>${kind==='verse'?`<div class="verse">${esc(b)}</div>`:`<p>${esc(b).replace(/\n/g,'<br>')}</p>`}</section>`).join('')
       : `<section class="content-not-loaded"><h3>${teacher?'Teacher':'Student'} Manual content</h3><p>${esc(body.message||'The full authorised lesson body has not yet been loaded.')}</p><p><strong>Lesson ${esc(l.lesson_number)}:</strong> ${esc(l.title)} — ${fmtDate(l.lesson_date)}</p><p class="help">This WebApp deliberately does not substitute guessed or placeholder manual text. Upload the authorised lesson JSON to the private ${esc(state.content.active_manual_year)} folder and it becomes available without rebuilding public_html.</p></section>`;
-    host.innerHTML=`<div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / <a href="#/discovery" data-route="discovery">Discovery Class</a> / Lesson ${esc(l.lesson_number)}</div><div class="section-head"><div><div class="eyebrow" style="color:var(--blue)">${fmtDate(l.lesson_date)}</div><h1 class="page-title">Lesson ${esc(l.lesson_number)} — ${esc(l.title)}</h1></div></div><div class="segmented" aria-label="Discovery Class manual type"><button id="studentMode" class="${teacher?'':'active'}">Student Manual</button><button id="teacherMode" class="${teacher?'active':''}">Teacher Manual</button></div><div class="reader-toolbar"><button class="btn btn-soft" id="lessonListen" ${body.available?'':'disabled'}>🎧 Listen</button><button class="btn" id="lessonBookmark">🔖 Bookmark</button><button class="btn" id="lessonSave">⬇ Save Offline</button><button class="btn" id="lessonShare">↗ Share</button><button class="btn" id="lessonAPlus">A+</button><button class="btn" id="lessonAMinus">A−</button></div><article class="reader lesson" id="lessonReader">${bodyHtml}<section class="note-box"><h3>My Notes</h3><textarea id="lessonNote" placeholder="Write your personal notes here..."></textarea><p class="help">Saved only on this device.</p></section></article>`;
+    host.innerHTML=`<div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / <a href="#/discovery" data-route="discovery">Discovery Class</a> / Lesson ${esc(l.lesson_number)}</div><div class="section-head"><div><div class="eyebrow" style="color:var(--blue)">${fmtDate(l.lesson_date)}</div><h1 class="page-title">Lesson ${esc(l.lesson_number)} — ${esc(l.title)}</h1></div></div><div class="segmented" aria-label="Discovery Class manual type"><button id="studentMode" class="${teacher?'':'active'}">Student Manual</button><button id="teacherMode" class="${teacher?'active':''}">Teacher Manual</button></div><div class="reader-toolbar"><button class="btn btn-soft" id="lessonListen">🎧 Listen</button><button class="btn" id="lessonBookmark">🔖 Bookmark</button><button class="btn" id="lessonSave">⬇ Save Offline</button><button class="btn" id="lessonShare">↗ Share</button><button class="btn" id="lessonAPlus">A+</button><button class="btn" id="lessonAMinus">A−</button></div><article class="reader lesson" id="lessonReader">${bodyHtml}<section class="note-box"><h3>My Notes</h3><textarea id="lessonNote" placeholder="Write your personal notes here..."></textarea><p class="help">Saved only on this device.</p></section></article>`;
     $('#studentMode').onclick=async()=>{state.lessonMode='student';await renderLessonBody()};
     $('#teacherMode').onclick=async()=>{state.lessonMode='teacher';await renderLessonBody()};
-    $('#lessonListen').onclick=()=>{if(body.available)speakText([l.title,...sections.map(x=>x[0]+'. '+x[1])].join('. '))};
+    $('#lessonListen').onclick=()=>{const speech=body.available?[l.title,...sections.map(x=>x[0]+'. '+x[1])].join('. '):`Lesson ${l.lesson_number}. ${l.title}. ${fmtDate(l.lesson_date)}. Full ${state.lessonMode} manual content has not yet been loaded.`;speakText(speech,l.title)};
     $('#lessonBookmark').onclick=()=>toggleBookmark('lesson:'+state.content.active_manual_year+':'+l.lesson_number,{type:'lesson',year:state.content.active_manual_year,lesson_number:l.lesson_number,title:l.title});
     $('#lessonSave').onclick=()=>saveOfflineLesson({meta:l,manual_type:state.lessonMode,body});
     $('#lessonShare').onclick=()=>sharePage(l.title,location.origin+location.pathname+'#/discovery/lesson/'+l.lesson_number);
@@ -198,10 +199,15 @@
   }
 
   function renderEvents(){
-    const el=$('#eventsList');if(!el)return;const now=state.content?.server_now?new Date(state.content.server_now):new Date();
-    const events=(state.content?.events||[]).filter(e=>new Date(e.start_at)>=now).slice().sort((a,b)=>new Date(a.start_at)-new Date(b.start_at));
-    el.innerHTML=events.map(e=>`<article class="card"><div class="eyebrow" style="color:var(--blue)">${fmtDateTime(e.start_at)}</div><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${e.location?`<p>📍 ${esc(e.location)}</p>`:''}${e.join_url?`<a data-external class="btn btn-primary" href="${esc(e.join_url)}">Join / Open ↗</a>`:''}</article>`).join('')||'<div class="empty">No activities published yet.</div>';
+    const el=$('#eventsList');if(!el||!state.content)return;
+    const currentMonth=(state.content?.server_now||new Date().toISOString()).slice(0,7);if(!state.eventMonth)state.eventMonth=currentMonth;
+    const monthInput=$('#eventMonth');if(monthInput){monthInput.value=state.eventMonth;monthInput.onchange=()=>{state.eventMonth=monthInput.value||currentMonth;renderEvents();};}
+    const shiftMonth=delta=>{const [y,m]=state.eventMonth.split('-').map(Number);const d=new Date(Date.UTC(y,m-1+delta,1));state.eventMonth=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;renderEvents();};
+    if($('#eventPrevMonth'))$('#eventPrevMonth').onclick=()=>shiftMonth(-1);if($('#eventNextMonth'))$('#eventNextMonth').onclick=()=>shiftMonth(1);if($('#eventThisMonth'))$('#eventThisMonth').onclick=()=>{state.eventMonth=currentMonth;renderEvents();};
+    const events=(state.content.events||[]).filter(e=>String(e.start_at||'').slice(0,7)===state.eventMonth).slice().sort((a,b)=>new Date(a.start_at)-new Date(b.start_at));const st=state.content.settings||{};
+    el.innerHTML=events.map(e=>{const isSunday=e.title==='Sunday Services';const live=isSunday?`<div class="sunday-live"><strong>Join us live on Sunday</strong>${st.facebook?`<a class="btn" data-external href="${esc(st.facebook)}">Facebook Live ↗</a>`:''}${st.youtube?`<a class="btn" data-external href="${esc(st.youtube)}">YouTube Live ↗</a>`:''}</div>`:'';return `<article class="card"><div class="eyebrow" style="color:var(--blue)">${fmtDateTime(e.start_at)}</div><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${e.location?`<p>📍 ${esc(e.location)}</p>`:''}${e.join_url?`<a data-external class="btn btn-primary" href="${esc(e.join_url)}">Join / Open ↗</a>`:''}${live}</article>`;}).join('')||'<div class="empty">No church activities are scheduled for this month.</div>';
   }
+
   function renderServiceTimes(){
     const el=$('#serviceTimes');if(!el)return;const rows=state.content?.service_times||[];
     el.innerHTML=`<div class="timezone-note">🕒 All service times use Scotland/UK local time (<strong>Europe/London</strong>) and automatically follow BST/GMT clock changes.</div>`+rows.map(r=>`<div class="card"><strong>${esc(r.day_label)} · ${esc(r.time_label)}</strong><p>${esc(r.service_name)}</p>${r.note?`<small>${esc(r.note)}</small>`:''}</div>`).join('');
@@ -234,10 +240,20 @@
     const sel=$('#donRef');if(sel)sel.onchange=()=>$('#donRefCode').textContent=sel.value;$('#copyRef').onclick=()=>copyText(sel?.value||'',$('#copyRef'));$('#closeDonate').onclick=()=>$('#donateModal').classList.remove('open');$('#donateModal').classList.add('open');
   }
 
-  function speakText(text){
-    if(!('speechSynthesis'in window)){toast('Read-aloud is not supported by this browser.');return}
-    speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1;const bar=$('#audioBar');bar.classList.add('show');$('#audioTitle').textContent='Read Aloud';$('#audioToggle').textContent='⏸';u.onend=()=>{bar.classList.remove('show');$('#audioToggle').textContent='▶'};speechSynthesis.speak(u);$('#audioToggle').onclick=()=>{if(speechSynthesis.paused){speechSynthesis.resume();$('#audioToggle').textContent='⏸'}else{speechSynthesis.pause();$('#audioToggle').textContent='▶'}};$('#audioStop').onclick=()=>{speechSynthesis.cancel();bar.classList.remove('show')};
+  function splitSpeechText(text,max=220){
+    const clean=String(text||'').replace(/\s+/g,' ').trim();if(!clean)return[];const parts=clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[clean],out=[];let cur='';
+    for(const part of parts){const piece=part.trim();if(!piece)continue;if((cur+' '+piece).trim().length<=max){cur=(cur+' '+piece).trim();continue}if(cur)out.push(cur);if(piece.length<=max){cur=piece;continue}for(let i=0;i<piece.length;i+=max)out.push(piece.slice(i,i+max));cur='';}if(cur)out.push(cur);return out;
   }
+  function stopSpeech(){if('speechSynthesis'in window)speechSynthesis.cancel();state.audio={chunks:[],index:0,utterance:null,playing:false,paused:false};const bar=$('#audioBar');if(bar)bar.classList.remove('show');if($('#audioToggle'))$('#audioToggle').textContent='▶';const prog=$('#audioBar .progress span');if(prog)prog.style.width='0%';}
+  function speakNextChunk(){if(!state.audio.playing||state.audio.index>=state.audio.chunks.length){stopSpeech();return}const text=state.audio.chunks[state.audio.index];const u=new SpeechSynthesisUtterance(text);state.audio.utterance=u;u.rate=1;u.pitch=1;u.volume=1;const voices=speechSynthesis.getVoices();const preferred=voices.find(v=>/^en-GB/i.test(v.lang))||voices.find(v=>/^en/i.test(v.lang));if(preferred)u.voice=preferred;u.onend=()=>{if(!state.audio.playing)return;state.audio.index+=1;const prog=$('#audioBar .progress span');if(prog)prog.style.width=Math.min(100,(state.audio.index/state.audio.chunks.length)*100)+'%';setTimeout(speakNextChunk,30)};u.onerror=()=>{toast('Audio stopped. Tap Listen to try again.');stopSpeech();};speechSynthesis.speak(u);}
+  function speakText(text,title='Read Aloud'){
+    if(!('speechSynthesis'in window)||typeof SpeechSynthesisUtterance==='undefined'){toast('Read-aloud is not supported by this browser.');return}const chunks=splitSpeechText(text);if(!chunks.length){toast('There is no text available to read aloud yet.');return}
+    speechSynthesis.cancel();state.audio={chunks,index:0,utterance:null,playing:true,paused:false};const bar=$('#audioBar');if(bar)bar.classList.add('show');if($('#audioTitle'))$('#audioTitle').textContent=title;if($('#audioToggle'))$('#audioToggle').textContent='⏸';const prog=$('#audioBar .progress span');if(prog)prog.style.width='0%';
+    $('#audioToggle').onclick=()=>{if(!state.audio.playing)return;if(state.audio.paused){speechSynthesis.resume();state.audio.paused=false;$('#audioToggle').textContent='⏸';}else{speechSynthesis.pause();state.audio.paused=true;$('#audioToggle').textContent='▶';}};$('#audioStop').onclick=stopSpeech;
+    // Start immediately from the user's tap. If voices are still loading, the browser default voice is used.
+    speakNextChunk();
+  }
+
   function toggleBookmark(key,item){const b=store.get('bookmarks',{});if(b[key])delete b[key];else b[key]=item;store.set('bookmarks',b);toast(b[key]?'Bookmarked':'Bookmark removed')}
   function saveOfflineLesson(item){const o=store.get('offline_lessons',{}),key=(item.meta?.lesson_number||Date.now())+':'+item.manual_type;o[key]=item;store.set('offline_lessons',o);toast('Saved for offline reading on this device')}
   async function sharePage(title,url){try{if(navigator.share)await navigator.share({title,text:title,url});else{await navigator.clipboard.writeText(url);toast('Link copied')}}catch(e){if(e.name!=='AbortError')toast('Unable to share right now')}}

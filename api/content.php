@@ -18,10 +18,11 @@ function nthWeekdayOfMonth(DateTimeImmutable $d): int { return intdiv(((int)$d->
 function lastSundayOfMonth(DateTimeImmutable $d): bool { return $d->format('N')==='7' && $d->modify('+7 days')->format('n')!==$d->format('n'); }
 function isoLocal(DateTimeImmutable $d): string { return $d->format('Y-m-d\TH:i:sP'); }
 
-// Generate upcoming regular church activities in Europe/London so BST/GMT changes are automatic.
+// Generate a rolling multi-year church calendar in Europe/London so BST/GMT changes are automatic.
+// One year of history plus two years ahead lets the month picker browse well beyond the current month.
 $regular=[];
-for($i=0;$i<45;$i++){
-  $day=$now->setTime(0,0)->modify("+{$i} days");
+for($i=-365;$i<=730;$i++){
+  $day=$now->setTime(0,0)->modify(($i>=0?'+':'').$i.' days');
   if($day->format('N')==='3'){
     $third=nthWeekdayOfMonth($day)===3;
     $start=$day->setTime(19,0);
