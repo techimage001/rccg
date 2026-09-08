@@ -79,3 +79,18 @@ button:disabled{cursor:not-allowed;opacity:.52}
 .btn-youtube{background:#FF0000!important;color:#fff!important;border-color:#FF0000!important}
 .btn-website{background:#fff!important;color:#0a4dbf!important;border-color:#0a4dbf!important}
 .btn-whatsapp{background:#25D366!important;color:#fff!important;border-color:#25D366!important}
+
+
+/* v9 premium polish */
+.form-top-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.form-top-row .breadcrumb{margin-bottom:0}
+.form-close-btn{flex:0 0 auto;width:38px;height:38px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--navy);font-size:26px;line-height:1;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 14px rgba(6,36,81,.08)}
+.form-close-btn:hover{background:#f4f7fb}.form-close-btn:focus-visible{outline:3px solid #92b8ff;outline-offset:2px}
+.contact-value-link{color:var(--blue);font-weight:800;text-decoration:none;overflow-wrap:anywhere}.contact-value-link:hover{text-decoration:underline}
+.btn-email{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}
+@media (max-width:1023px){
+  .content{padding-bottom:210px}
+  body.form-route .floating-actions{display:none}
+}
+@media (min-width:1024px){
+  body.form-route .floating-actions{display:none}
+}
