@@ -6,12 +6,29 @@
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmtDate=d=>new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(d+'T12:00:00'));
   const fmtDateTime=d=>new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}).format(new Date(d));
-  async function json(url,opts){const r=await fetch(url,opts);const j=await r.json().catch(()=>({ok:false,message:'Unexpected server response.'}));if(!r.ok&&!j.message)j.message='Request failed.';return j}
+  async function json(url,opts){
+    const r=await fetch(url,opts);
+    let j;
+    try{j=await r.json()}catch{throw new Error('The server returned an unexpected response.');}
+    if(!r.ok)throw new Error(j?.message||'Request failed.');
+    return j;
+  }
 
   async function init(){
     if(!location.hash || location.hash==='#') history.replaceState(null,'',location.pathname+location.search+'#/home');
     bindGlobal();
-    try{state.content=await json(API+'content.php');renderDynamic();}catch(e){renderOfflineFallback()}
+    try{
+      const content=await json(API+'content.php');
+      if(!content?.ok)throw new Error(content?.message||'Church data could not be loaded.');
+      state.content=content;
+      state.dataError='';
+      renderDynamic();
+    }catch(e){
+      state.content=null;
+      state.dataError=e?.message||'Church data could not be loaded.';
+      renderDataLoadError(state.dataError);
+      renderOfflineFallback();
+    }
     await updateSignupState();
     route(location.hash.replace('#/','')||'home',false);
     startSignupTimer();registerSW();
@@ -55,6 +72,17 @@
     window.scrollTo({top:0,behavior:alreadyHome?'smooth':'auto'});
   }
   function basePage(name){if(name.startsWith('discovery'))return'discovery';if(name.startsWith('form/'))return'forms';return name}
+
+  function dataErrorHtml(message,colspan=1){
+    const text=esc(message||'Church data could not be loaded.');
+    const box=`<div class="empty"><strong>Church data could not be loaded.</strong><br>${text}<br><small>Please refresh after checking that the private RCCG data folder is installed outside public_html.</small></div>`;
+    return colspan>1?`<tr><td colspan="${colspan}">${box}</td></tr>`:box;
+  }
+  function renderDataLoadError(message){
+    const targets=[['#quickGrid',1],['#nextAtChurch',1],['#eventsList',1],['#serviceTimes',1],['#churchInfo',1],['#lessonToc',3]];
+    for(const [selector,cols] of targets){const el=$(selector);if(el)el.innerHTML=dataErrorHtml(message,cols);}
+    const st=$('#lessonFilterStatus');if(st)st.textContent='Teacher Manual data is unavailable until the private data connection is restored.';
+  }
 
   function renderDynamic(){
     const c=state.content;if(!c?.ok)return;
@@ -129,6 +157,7 @@
     return [start.toISOString().slice(0,10),end.toISOString().slice(0,10)];
   }
   function renderDiscovery(){
+    if(state.dataError&&!state.content){const toc=$('#lessonToc');if(toc)toc.innerHTML=dataErrorHtml(state.dataError,3);return;}
     const all=(state.content?.discovery_lessons||[]).slice().sort((a,b)=>isoDay(a.lesson_date).localeCompare(isoDay(b.lesson_date)));
     const today=isoDay(state.content?.server_now||new Date().toISOString());
     const [weekStart,weekEnd]=weekBounds(today);
@@ -185,7 +214,7 @@
   }
 
   function renderEvents(){
-    const el=$('#eventsList');if(!el||!state.content)return;
+    const el=$('#eventsList');if(!el)return;if(state.dataError&&!state.content){el.innerHTML=dataErrorHtml(state.dataError);return;}if(!state.content)return;
     const currentMonth=(state.content?.server_now||new Date().toISOString()).slice(0,7);if(!state.eventMonth)state.eventMonth=currentMonth;
     const monthInput=$('#eventMonth');if(monthInput){monthInput.value=state.eventMonth;monthInput.onchange=()=>{state.eventMonth=monthInput.value||currentMonth;renderEvents();};}
     const shiftMonth=delta=>{const [y,m]=state.eventMonth.split('-').map(Number);const d=new Date(Date.UTC(y,m-1+delta,1));state.eventMonth=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;renderEvents();};
@@ -195,11 +224,11 @@
   }
 
   function renderServiceTimes(){
-    const el=$('#serviceTimes');if(!el)return;const rows=state.content?.service_times||[],tz=state.content?.timezone||'';
+    const el=$('#serviceTimes');if(!el)return;if(state.dataError&&!state.content){el.innerHTML=dataErrorHtml(state.dataError);return;}const rows=state.content?.service_times||[],tz=state.content?.timezone||'';
     el.innerHTML=`<div class="timezone-note">🕒 Service times use the church's configured local timezone${tz?` (<strong>${esc(tz)}</strong>)`:''} and automatically follow local clock changes.</div>`+rows.map(r=>`<div class="card"><strong>${esc(r.day_label)} · ${esc(r.time_label)}</strong><p>${esc(r.service_name)}</p>${r.note?`<small>${esc(r.note)}</small>`:''}</div>`).join('');
   }
   function renderChurchInfo(){
-    const s=state.content?.settings||{},el=$('#churchInfo');if(!el)return;const phone=s.phone||'',display=s.phone_display||phone,wa=(s.whatsapp||'').replace(/\D/g,'');
+    const el=$('#churchInfo');if(!el)return;if(state.dataError&&!state.content){el.innerHTML=dataErrorHtml(state.dataError);return;}const s=state.content?.settings||{},phone=s.phone||'',display=s.phone_display||phone,wa=(s.whatsapp||'').replace(/\D/g,'');
     const serviceCards=(state.content?.contact_services||[]).map(x=>`<div class="card"><h3>${esc(x.icon||'🕒')} ${esc(x.title||'Online service')}</h3>${x.schedule_label?`<p>${esc(x.schedule_label)}</p>`:''}${x.join_url?`<a class="btn btn-primary" data-external href="${esc(x.join_url)}">Join / Open ↗</a>`:''}</div>`).join('');
     el.innerHTML=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))"><div class="card"><h3>📞 Call Us</h3><p>${esc(display)}</p>${phone?`<a class="btn btn-primary" href="tel:${esc(phone)}">Call now</a>`:''}</div><div class="card"><h3>💬 WhatsApp Us</h3><p>${esc(display)}</p>${wa?`<a class="btn btn-primary" data-external href="https://wa.me/${esc(wa)}">Open WhatsApp ↗</a>`:''}</div><div class="card"><h3>📍 Visit Us</h3><p>${esc(s.address||'')}</p></div><div class="card"><h3>🌐 Website</h3><p>${esc(s.website||'')}</p>${s.website?`<a class="btn btn-website" data-external href="${esc(s.website)}">Open website ↗</a>`:''}</div><div class="card"><h3>Facebook</h3><p>RCCG Open Heavens Fife</p>${s.facebook?`<a class="btn btn-facebook" data-external href="${esc(s.facebook)}">Open Facebook ↗</a>`:''}</div><div class="card"><h3>YouTube</h3><p>Church channel</p>${s.youtube?`<a class="btn btn-youtube" data-external href="${esc(s.youtube)}">Open YouTube ↗</a>`:''}</div>${serviceCards}</div>`;
   }

@@ -1,6 +1,16 @@
 <?php
-$private = dirname(__DIR__) . '/rccg_fife_private';
-$cfg = file_exists($private.'/config.php') ? require $private.'/config.php' : ['environment'=>'testing','site_name'=>'RCCG Open Heavens Fife'];
+$privateCandidates = [
+  dirname(__DIR__) . '/rccg_fife_private',
+  dirname(__DIR__,2) . '/rccg_fife_private',
+  dirname(__DIR__,3) . '/rccg_fife_private',
+];
+$envPrivate = getenv('RCCG_FIFE_PRIVATE_DIR');
+if (is_string($envPrivate) && trim($envPrivate) !== '') array_unshift($privateCandidates, rtrim(trim($envPrivate), '/\\'));
+$private = '';
+foreach (array_unique($privateCandidates) as $candidate) {
+  if (is_dir($candidate) && is_file($candidate.'/config.php')) { $private = $candidate; break; }
+}
+$cfg = $private !== '' ? require $private.'/config.php' : ['environment'=>'testing','site_name'=>'RCCG Open Heavens Fife'];
 $testing = ($cfg['environment'] ?? 'testing') !== 'production';
 ?><!doctype html>
 <html lang="en-GB">
@@ -14,7 +24,7 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
   <link rel="manifest" href="site.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="assets/app.css?v=6.3">
+  <link rel="stylesheet" href="assets/app.css?v=6.4">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -111,6 +121,6 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
   <div class="modal" id="installModal"><div class="modal-card"><h2>Install or save RCCG Open Heavens Fife</h2><div id="installHelp"></div><div class="modal-actions"><button class="btn" id="closeInstall">Close</button></div></div></div>
   <div class="modal" id="signupModal"><div class="modal-card"><h2>Stay connected with RCCG Open Heavens Fife</h2><p>Receive important church updates. Verify your email to keep this browser recognised.</p><form id="signupForm" class="form-grid"><input id="signupWebsite" name="company" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px"><input id="signupStarted" type="hidden"><div class="field"><label for="signupEmail">Email address</label><input id="signupEmail" type="email" required></div><button class="btn btn-primary" type="submit">Continue</button><p id="signupStatus" class="status" aria-live="polite"></p></form><div class="modal-actions"><button class="btn" id="signupClose">Not now</button></div></div></div>
 </div>
-<script src="assets/app.js?v=6.3" defer></script>
+<script src="assets/app.js?v=6.4" defer></script>
 </body>
 </html>

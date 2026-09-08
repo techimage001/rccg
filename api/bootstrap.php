@@ -1,16 +1,78 @@
 <?php
 declare(strict_types=1);
-$PRIVATE = dirname(__DIR__,2) . '/rccg_fife_private';
-$CFG = file_exists($PRIVATE.'/config.php') ? require $PRIVATE.'/config.php' : [];
-$dbFile = $PRIVATE.'/rccg.sqlite';
-if (!extension_loaded('pdo_sqlite')) {
-  throw new RuntimeException('PDO SQLite is not enabled on this server. Enable pdo_sqlite in Hostinger PHP extensions.');
+
+function api_json(array $data,int $status=200): never {
+  http_response_code($status);
+  header('Content-Type: application/json; charset=utf-8');
+  header('Cache-Control: no-store');
+  echo json_encode($data,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+  exit;
 }
-$DB = new PDO('sqlite:'.$dbFile);
-$DB->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$DB->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-$DB->exec('PRAGMA foreign_keys=ON');
-function api_json(array $data,int $status=200): never {http_response_code($status);header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');echo json_encode($data,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);exit;}
+
+/**
+ * Locate the private RCCG data directory while keeping it outside the public
+ * WebApp folder. This supports both normal Hostinger public_html deployment
+ * and the nested public_html/public_html layout currently used by the site.
+ */
+function locate_private_dir(): ?string {
+  $candidates=[];
+  $env=getenv('RCCG_FIFE_PRIVATE_DIR');
+  if(is_string($env) && trim($env)!=='') $candidates[]=rtrim(trim($env),'/\\');
+
+  // api/ lives one level below the WebApp root. Walk upward far enough to
+  // support public_html/api and public_html/public_html/api deployments.
+  for($levels=2;$levels<=5;$levels++){
+    $base=dirname(__DIR__,$levels);
+    if($base && $base!=='.') $candidates[]=$base.'/rccg_fife_private';
+  }
+
+  if(!empty($_SERVER['DOCUMENT_ROOT'])){
+    $doc=rtrim((string)$_SERVER['DOCUMENT_ROOT'],'/\\');
+    $candidates[]=dirname($doc).'/rccg_fife_private';
+    $candidates[]=dirname($doc,2).'/rccg_fife_private';
+  }
+
+  $seen=[];
+  foreach($candidates as $candidate){
+    $candidate=rtrim($candidate,'/\\');
+    if($candidate==='' || isset($seen[$candidate])) continue;
+    $seen[$candidate]=true;
+    if(is_dir($candidate) && is_file($candidate.'/rccg.sqlite')) return $candidate;
+  }
+
+  error_log('RCCG WebApp: private data directory not found. Candidate count='.count($seen));
+  return null;
+}
+
+$PRIVATE=locate_private_dir();
+if($PRIVATE===null){
+  api_json([
+    'ok'=>false,
+    'code'=>'PRIVATE_DATA_NOT_FOUND',
+    'message'=>'Church data is temporarily unavailable because the private data folder could not be located.'
+  ],500);
+}
+
+$CFG=is_file($PRIVATE.'/config.php') ? require $PRIVATE.'/config.php' : [];
+$dbFile=$PRIVATE.'/rccg.sqlite';
+if(!is_file($dbFile)){
+  error_log('RCCG WebApp: rccg.sqlite is missing from the private data directory.');
+  api_json(['ok'=>false,'code'=>'DATABASE_NOT_FOUND','message'=>'Church data is temporarily unavailable because the private database is missing.'],500);
+}
+if(!extension_loaded('pdo_sqlite')){
+  error_log('RCCG WebApp: PDO SQLite PHP extension is not enabled.');
+  api_json(['ok'=>false,'code'=>'SQLITE_NOT_ENABLED','message'=>'Church data is temporarily unavailable because the server database extension is not enabled.'],500);
+}
+try{
+  $DB=new PDO('sqlite:'.$dbFile);
+  $DB->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+  $DB->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);
+  $DB->exec('PRAGMA foreign_keys=ON');
+}catch(Throwable $e){
+  error_log('RCCG WebApp database connection failed: '.$e->getMessage());
+  api_json(['ok'=>false,'code'=>'DATABASE_CONNECTION_FAILED','message'=>'Church data is temporarily unavailable because the private database could not be opened.'],500);
+}
+
 function now_utc(): string {return gmdate('c');}
 function site_url(array $cfg): string {
   if (!empty($cfg['site_url'])) return rtrim((string)$cfg['site_url'],'/');
