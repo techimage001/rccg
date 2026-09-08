@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#f7f9fc",
   "theme_color": "#062451",
-  "description": "Mobile-first RCCG Open Heavens Fife WebApp with Discovery Class, church activities, prayer requests, WhatsApp, donations and offline support.",
+  "description": "RCCG Open Heavens Fife church WebApp with Sunday School Teacher Manual, church activities, first-time worshipper feedback, prayer requests, WhatsApp, donations and offline support.",
   "icons": [
     {
       "src": "icons/icon-192.png",

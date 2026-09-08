@@ -7,8 +7,6 @@ $tz=new DateTimeZone($tzName);
 $now=new DateTimeImmutable('now',$tz);
 $today=$now->format('Y-m-d');
 
-$s=$DB->prepare('SELECT * FROM devotionals WHERE published=1 AND devotional_date<=? ORDER BY devotional_date DESC LIMIT 1');
-$s->execute([$today]);$dev=$s->fetch()?:null;
 $services=$DB->query('SELECT * FROM service_times WHERE active=1 ORDER BY sort_order,id')->fetchAll();
 $dbEvents=$DB->query('SELECT * FROM events WHERE active=1 ORDER BY start_at ASC')->fetchAll();
 $mins=$DB->query('SELECT * FROM ministries WHERE active=1 ORDER BY name')->fetchAll();
@@ -109,7 +107,6 @@ api_json([
   'server_now'=>isoLocal($now),
   'timezone'=>$tzName,
   'settings'=>$settings,
-  'today_devotional'=>$dev,
   'service_times'=>$services,
   'events'=>$events,
   'discovery_lessons'=>$lessons,
