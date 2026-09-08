@@ -30,6 +30,14 @@ if(table_exists($DB,'recurring_events')){
 }
 $events=array_merge($dbEvents,$regular);usort($events,fn($a,$b)=>strcmp((string)$a['start_at'],(string)$b['start_at']));
 
+// Fellowship invitation text lives in the private settings table, never in public code.
+$fellowNote=(string)($settings['sunday_fellowship_note']??'');
+$csvList=function(string $raw):array{return array_values(array_filter(array_map('trim',explode(',',$raw)),fn($v)=>$v!==''));};
+$fellowSlugs=$csvList((string)($settings['sunday_fellowship_slugs']??''));
+$fellowServiceIds=$csvList((string)($settings['sunday_fellowship_service_ids']??''));
+foreach($events as &$ev){$ev['fellowship_note']=($fellowNote!==''&&in_array((string)($ev['slug']??''),$fellowSlugs,true))?$fellowNote:'';}unset($ev);
+foreach($services as &$sv){$sv['fellowship_note']=($fellowNote!==''&&in_array((string)($sv['id']??''),$fellowServiceIds,true))?$fellowNote:'';}unset($sv);
+
 $quick=[];if(table_exists($DB,'quick_access')){foreach($DB->query('SELECT * FROM quick_access WHERE active=1 ORDER BY sort_order,id') as $r){$r['external_url']='';if(!empty($r['external_setting_key']))$r['external_url']=$settings[$r['external_setting_key']]??'';$quick[]=$r;}}
 $cards=[];if(table_exists($DB,'contact_cards')){foreach($DB->query('SELECT * FROM contact_cards WHERE active=1 ORDER BY sort_order,id') as $r){$r['value']=$settings[$r['setting_key']]??'';$r['display_value']=$settings[$r['display_setting_key']]??$r['value'];$cards[]=$r;}}
 $forms=[];$formsFile=$PRIVATE.'/forms.json';if(is_file($formsFile)){$forms=json_decode((string)file_get_contents($formsFile),true);if(!is_array($forms))$forms=[];}

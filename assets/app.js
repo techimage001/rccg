@@ -1,13 +1,11 @@
 (() => {
   const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
   const API='api/';
-  const state={content:null,route:'home',lessonMode:'teacher',currentLesson:null,currentBody:null,lessonFilter:'all',signupShown:false,eventMonth:null,audio:{chunks:[],index:0,utterance:null,playing:false,paused:false}};
+  const state={content:null,route:'home',lessonMode:'teacher',currentLesson:null,currentBody:null,lessonFilter:'all',signupShown:false,eventMonth:null,formReturn:'home',audio:{chunks:[],index:0,utterance:null,playing:false,paused:false}};
   const store={get(k,d){try{return JSON.parse(localStorage.getItem('rccg_'+k))??d}catch{return d}},set(k,v){localStorage.setItem('rccg_'+k,JSON.stringify(v))}};
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmtDate=d=>new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(d+'T12:00:00'));
   const fmtDateTime=d=>new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}).format(new Date(d));
-  const fmtTime=d=>new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit'}).format(new Date(d));
-  const fmtEventRange=e=>e?.end_at?`${fmtDateTime(e.start_at)} - ${fmtTime(e.end_at)}`:fmtDateTime(e.start_at);
   async function json(url,opts){const r=await fetch(url,opts);const j=await r.json().catch(()=>({ok:false,message:'Unexpected server response.'}));if(!r.ok&&!j.message)j.message='Request failed.';return j}
 
   async function init(){
@@ -28,15 +26,15 @@
     $('#topDonate')?.addEventListener('click',openDonate);$('#desktopDonate')?.addEventListener('click',openDonate);
     $('#shareApp')?.addEventListener('click',()=>sharePage('RCCG Open Heavens Fife',location.origin+location.pathname+'#/home'));
     $('#installApp')?.addEventListener('click',installPwa);$('#drawerInstall')?.addEventListener('click',installPwa);
-    $('#closeInstall')?.addEventListener('click',()=>$('#installModal')?.classList.remove('open'));$('#drawerSignup')?.addEventListener('click',()=>{ $('#drawer')?.classList.remove('open'); openSignup(); });
+    $('#closeInstall')?.addEventListener('click',()=>$('#installModal')?.classList.remove('open'));
+    $('#keepEditing')?.addEventListener('click',()=>$('#discardModal')?.classList.remove('open'));
+    $('#discardForm')?.addEventListener('click',()=>{const f=$('#dynamicForm');if(f){f.reset();$$('.star-rating label').forEach(l=>l.classList.remove('chosen'));}leaveForm();});$('#drawerSignup')?.addEventListener('click',()=>{ $('#drawer')?.classList.remove('open'); openSignup(); });
     document.addEventListener('click',e=>{
       const routeEl=e.target.closest('[data-route]');
       if(routeEl){e.preventDefault();route(routeEl.dataset.route);return}
       const c=e.target.closest('[data-copy]');if(c){copyText(c.dataset.copy,c);return}
       const ext=e.target.closest('a[data-external]');if(ext){ext.target='_blank';ext.rel='noopener noreferrer'}
     });
-    $('#keepEditingForm')?.addEventListener('click',()=>$('#discardFormModal')?.classList.remove('open'));
-    $('#discardFormNow')?.addEventListener('click',()=>{ $('#discardFormModal')?.classList.remove('open'); route('home'); });
     document.addEventListener('keydown',e=>{if(e.key==='Escape'){$$('.modal.open,.drawer.open').forEach(x=>x.classList.remove('open'))}});
   }
 
@@ -44,10 +42,13 @@
     if(!name)name='home';
     if(name==='read')name='home';
     const alreadyHome=state.route==='home'&&name==='home';
+    const previous=state.route;
     state.route=name;
-    document.body.classList.toggle('form-route',name.startsWith('form/'));
     if(push)history.pushState(null,'',location.pathname+location.search+'#/'+name);
     const page=basePage(name);
+    if(page==='forms'){if(!String(previous||'').startsWith('form/'))state.formReturn=previous||'home';}
+    else{$('#discardModal')?.classList.remove('open');}
+    document.body.classList.toggle('form-open',page==='forms');
     $$('.page-panel').forEach(p=>p.classList.toggle('active',p.dataset.page===page));
     $$('[data-route]').forEach(x=>x.classList.toggle('active',x.dataset.route===page||x.dataset.route===name));
     $('#drawer')?.classList.remove('open');
@@ -80,11 +81,7 @@
 
   function renderHomeTiles(){
     const tiles=state.content?.quick_access||[];const g=$('#quickGrid');if(!g)return;
-    g.innerHTML=tiles.map(t=>{
-      const inner=`<span class="tile-icon">${esc(t.icon||'')}</span><strong>${esc(t.title)}</strong><small>${esc(t.subtitle||'')}</small><span class="arrow">${esc(t.button_label||'Open')} →</span>`;
-      if(t.external_url)return `<a class="card tile" href="${esc(t.external_url)}" data-external target="_blank" rel="noopener noreferrer">${inner}</a>`;
-      return `<a class="card tile" href="#/${esc(t.route)}" data-route="${esc(t.route)}">${inner}</a>`;
-    }).join('');
+    g.innerHTML=tiles.map(t=>{const inner=`<span class="tile-icon">${esc(t.icon||'')}</span><strong>${esc(t.title)}</strong><small>${esc(t.subtitle||'')}</small><span class="arrow">${esc(t.button_label||'Open')} →</span>`;if(t.external_url)return `<a class="card tile" href="${esc(t.external_url)}" data-external>${inner}</a>`;return `<a class="card tile" href="#/${esc(t.route)}" data-route="${esc(t.route)}">${inner}</a>`;}).join('');
   }
 
   function renderConnectLinks(){
@@ -99,10 +96,7 @@
     const future=(state.content.events||[]).filter(e=>new Date(e.start_at)>=now).sort((a,b)=>new Date(a.start_at)-new Date(b.start_at));
     const e=future[0];
     if(!e){el.innerHTML='<div class="empty">No upcoming activity has been published yet.</div>';return}
-    const action=e.slug==='daily-prayer'
-      ? `<a class="btn btn-primary" href="#/whats-on" data-route="whats-on">View in What's On →</a>`
-      : (e.join_url?`<a class="btn btn-primary" data-external target="_blank" rel="noopener noreferrer" href="${esc(e.join_url)}">Join / Open ↗</a>`:'');
-    el.innerHTML=`<div class="card"><time>${fmtEventRange(e)}</time><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${action}</div>`;
+    el.innerHTML=`<div class="card"><time>${fmtDateTime(e.start_at)}</time><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${e.fellowship_note?`<p class="fellowship-note">${esc(e.fellowship_note)}</p>`:''}<button class="btn btn-primary" type="button" data-route="whats-on">See What's On →</button></div>`;
   }
 
   function changeReaderFont(dir){const r=$('#devotionalBody')||$('#lessonReader');if(!r)return;let n=parseFloat(getComputedStyle(r).fontSize);r.style.fontSize=Math.max(16,Math.min(30,n+dir*2))+'px'}
@@ -191,36 +185,16 @@
     const shiftMonth=delta=>{const [y,m]=state.eventMonth.split('-').map(Number);const d=new Date(Date.UTC(y,m-1+delta,1));state.eventMonth=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;renderEvents();};
     if($('#eventPrevMonth'))$('#eventPrevMonth').onclick=()=>shiftMonth(-1);if($('#eventNextMonth'))$('#eventNextMonth').onclick=()=>shiftMonth(1);if($('#eventThisMonth'))$('#eventThisMonth').onclick=()=>{state.eventMonth=currentMonth;renderEvents();};
     const events=(state.content.events||[]).filter(e=>String(e.start_at||'').slice(0,7)===state.eventMonth).slice().sort((a,b)=>new Date(a.start_at)-new Date(b.start_at));const st=state.content.settings||{};
-    el.innerHTML=events.map(e=>{
-      const live=(e.facebook_live||e.youtube_live)
-        ? `<div class="sunday-live"><strong>Join us live on Sunday</strong>${e.facebook_live&&st.facebook?`<a class="btn btn-facebook" data-external target="_blank" rel="noopener noreferrer" href="${esc(st.facebook)}">Facebook Live ↗</a>`:''}${e.youtube_live&&st.youtube?`<a class="btn btn-youtube" data-external target="_blank" rel="noopener noreferrer" href="${esc(st.youtube)}">YouTube Live ↗</a>`:''}</div>`
-        : '';
-      const join=e.join_url?`<a data-external target="_blank" rel="noopener noreferrer" class="btn btn-primary" href="${esc(e.join_url)}">Join / Open ↗</a>`:'';
-      return `<article class="card"><div class="eyebrow" style="color:var(--blue)">${fmtEventRange(e)}</div><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${e.location?`<p>📍 ${esc(e.location)}</p>`:''}${join}${live}</article>`;
-    }).join('')||'<div class="empty">No church activities are scheduled for this month.</div>';
+    el.innerHTML=events.map(e=>{const live=(e.facebook_live||e.youtube_live)?`<div class="sunday-live"><strong>Join us live on Sunday</strong>${e.facebook_live&&st.facebook?`<a class="btn btn-facebook" data-external href="${esc(st.facebook)}">Facebook Live ↗</a>`:''}${e.youtube_live&&st.youtube?`<a class="btn btn-youtube" data-external href="${esc(st.youtube)}">YouTube Live ↗</a>`:''}</div>`:'';return `<article class="card"><div class="eyebrow" style="color:var(--blue)">${fmtDateTime(e.start_at)}</div><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${e.fellowship_note?`<p class="fellowship-note">${esc(e.fellowship_note)}</p>`:''}${e.location?`<p>📍 ${esc(e.location)}</p>`:''}${e.join_url?`<a data-external class="btn btn-primary" href="${esc(e.join_url)}">Join / Open ↗</a>`:''}${live}</article>`;}).join('')||'<div class="empty">No church activities are scheduled for this month.</div>';
   }
 
   function renderServiceTimes(){
     const el=$('#serviceTimes');if(!el)return;const rows=state.content?.service_times||[],tz=state.content?.timezone||'Europe/London';
-    el.innerHTML=`<div class="timezone-note">🕒 Service times use ${esc(tz)} and automatically follow local clock changes.</div>`+rows.map(r=>`<div class="card"><strong>${esc(r.day_label)} · ${esc(r.time_label)}</strong><p>${esc(r.service_name)}</p>${r.note?`<small>${esc(r.note)}</small>`:''}</div>`).join('');
+    el.innerHTML=`<div class="timezone-note">🕒 Service times use ${esc(tz)} and automatically follow local clock changes.</div>`+rows.map(r=>`<div class="card"><strong>${esc(r.day_label)} · ${esc(r.time_label)}</strong><p>${esc(r.service_name)}</p>${r.fellowship_note?`<p class="fellowship-note">${esc(r.fellowship_note)}</p>`:''}${r.note?`<small>${esc(r.note)}</small>`:''}</div>`).join('');
   }
   function renderChurchInfo(){
     const el=$('#churchInfo');if(!el)return;const cards=state.content?.contact_cards||[];
-    el.innerHTML=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${cards.map(c=>{
-      let href='';
-      if(c.action_type==='tel')href='tel:'+String(c.value||'');
-      else if(c.action_type==='whatsapp')href='https://wa.me/'+String(c.value||'').replace(/[^0-9]/g,'');
-      else if(c.action_type==='external')href=String(c.value||'');
-      else if(c.action_type==='email')href='mailto:'+String(c.value||'');
-      const newWindow=(c.action_type==='external'||c.action_type==='whatsapp')?' data-external target="_blank" rel="noopener noreferrer"':'';
-      const button=href&&c.button_label?`<a class="btn ${esc(c.button_class||'')}"${newWindow} href="${esc(href)}">${esc(c.button_label)}</a>`:'';
-      const visibleValue=c.display_value
-        ? (c.action_type==='email'&&href
-            ? `<p><a class="contact-value-link" href="${esc(href)}">${esc(c.display_value)}</a></p>`
-            : `<p>${esc(c.display_value)}</p>`)
-        : '';
-      return `<div class="card contact-card"><h3>${esc(c.icon||'')} ${esc(c.title)}</h3><p>${esc(c.subtitle||'')}</p>${visibleValue}${button}</div>`;
-    }).join('')}</div>`;
+    el.innerHTML=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${cards.map(c=>{let href='';if(c.action_type==='tel')href='tel:'+String(c.value||'');else if(c.action_type==='email')href='mailto:'+String(c.value||'');else if(c.action_type==='whatsapp')href='https://wa.me/'+String(c.value||'').replace(/[^0-9]/g,'');else if(c.action_type==='external')href=String(c.value||'');const sameWindow=(c.action_type==='tel'||c.action_type==='email');const button=href&&c.button_label?`<a class="btn ${esc(c.button_class||'')}" ${sameWindow?'':'data-external'} href="${esc(href)}">${esc(c.button_label)}</a>`:'';const shown=c.display_value?(c.action_type==='email'?`<p><a class="plain-link" href="${esc(href)}">${esc(c.display_value)}</a></p>`:`<p>${esc(c.display_value)}</p>`):'';return `<div class="card"><h3>${esc(c.icon||'')} ${esc(c.title)}</h3><p>${esc(c.subtitle||'')}</p>${shown}${button}</div>`;}).join('')}</div>`;
   }
 
   function formConfig(type){return state.content?.forms?.[type]||null;}
@@ -232,25 +206,26 @@
     if(field.type==='rating'){const min=Number(field.min||1),maxn=Number(field.max||5);return `<fieldset class="field rating-field"><legend>${esc(field.label)}${field.required?' *':''}</legend><div class="star-rating" role="radiogroup" aria-label="${esc(field.label)}">${Array.from({length:maxn-min+1},(_,k)=>k+min).map(n=>`<label><input type="radio" name="${esc(field.name)}" value="${n}"${req}><span aria-hidden="true">★</span><span class="sr-only">${n} star${n===1?'':'s'}</span></label>`).join('')}</div></fieldset>`;}
     const type=['email','tel','text'].includes(field.type)?field.type:'text';return `<div class="field"><label for="${id}">${esc(field.label)}${field.required?' *':''}${help}</label><input id="${id}" name="${esc(field.name)}" type="${type}"${req}${max}${field.autocomplete?` autocomplete="${esc(field.autocomplete)}"`:''}></div>`;
   }
-  function formIsDirty(form){
-    if(!form)return false;
-    return [...form.querySelectorAll('input:not([type="hidden"]):not([name="website"]),textarea,select')].some(el=>{
-      if((el.type==='radio'||el.type==='checkbox'))return el.checked;
-      return String(el.value||'').trim()!=='';
-    });
-  }
-  function requestCloseForm(){
-    const f=$('#dynamicForm');
-    if(f&&formIsDirty(f)){$('#discardFormModal')?.classList.add('open');return;}
-    route('home');
-  }
   function renderForm(type){
     const cfg=formConfig(type),el=$('#formHost');if(!el)return;if(!cfg){el.innerHTML='<div class="empty">This form is not available right now.</div>';return;}
     const hidden=cfg.endpoint==='api/contact.php'?`<input type="hidden" name="form_type" value="${esc(type)}">`:'';
-    el.innerHTML=`<div class="form-top-row"><div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / ${esc(cfg.title)}</div><button class="form-close-btn" id="formCloseBtn" type="button" aria-label="Close this form" title="Close form">×</button></div><h1 class="page-title">${esc(cfg.icon||'')} ${esc(cfg.title)}</h1><p class="lede">${esc(cfg.description||'')}</p><form id="dynamicForm" class="card form-grid" method="post" action="${esc(cfg.endpoint)}">${hidden}<input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true"><input type="hidden" name="started" value="${Date.now()-5000}">${(cfg.fields||[]).map(fieldHtml).join('')}<button class="btn btn-primary" type="submit">Submit</button><p id="formStatus" class="status" aria-live="polite"></p></form>`;
-    $('#formCloseBtn')?.addEventListener('click',requestCloseForm);
+    el.innerHTML=`<div class="form-head"><div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / ${esc(cfg.title)}</div><button class="icon-btn form-close" id="formClose" type="button" aria-label="Close the ${esc(cfg.title)} form" title="Close">✕</button></div><h1 class="page-title">${esc(cfg.icon||'')} ${esc(cfg.title)}</h1><p class="lede">${esc(cfg.description||'')}</p><form id="dynamicForm" class="card form-grid" method="post" action="${esc(cfg.endpoint)}">${hidden}<input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true"><input type="hidden" name="started" value="${Date.now()-5000}">${(cfg.fields||[]).map(fieldHtml).join('')}<button class="btn btn-primary" type="submit">Submit</button><p id="formStatus" class="status" aria-live="polite"></p></form>`;
     $('#dynamicForm').addEventListener('submit',submitDynamicForm);$$('.star-rating input').forEach(r=>r.addEventListener('change',()=>{$$('.star-rating label').forEach((label,i)=>label.classList.toggle('chosen',i<Number(r.value)));}));
+    $('#formClose')?.addEventListener('click',closeCurrentForm);
   }
+  function formIsDirty(form){
+    if(!form)return false;
+    const ignore=new Set(['website','started','form_type']);
+    for(const el of form.elements){
+      if(!el.name||ignore.has(el.name))continue;
+      if(el.type==='submit'||el.type==='button'||el.type==='hidden')continue;
+      if(el.type==='radio'||el.type==='checkbox'){if(el.checked)return true;continue}
+      if(String(el.value||'').trim()!=='')return true;
+    }
+    return false;
+  }
+  function leaveForm(){const back=state.formReturn||'home';state.formReturn='home';$('#discardModal')?.classList.remove('open');route(back);}
+  function closeCurrentForm(){if(!formIsDirty($('#dynamicForm'))){leaveForm();return}$('#discardModal')?.classList.add('open');}
   async function submitDynamicForm(e){e.preventDefault();const f=e.currentTarget,s=$('#formStatus');s.textContent='Sending…';const fd=new FormData(f);try{const r=await fetch(f.action,{method:'POST',body:fd,headers:{Accept:'application/json'}});const j=await r.json();s.textContent=j.message||'Submitted.';if(j.ok){f.reset();$$('.star-rating label').forEach(label=>label.classList.remove('chosen'));}}catch{s.textContent='We could not submit this right now. Please try again.'}}
 
   function openDonate(){

@@ -80,7 +80,7 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
   </div>
 
   <div class="floating-actions" aria-label="Quick contact">
-    <a class="whatsapp-fab" id="whatsappFab" href="#" data-external target="_blank" rel="noopener noreferrer" aria-label="Chat with Pastor Joseph on WhatsApp" title="Chat with Pastor Joseph on WhatsApp"><span aria-hidden="true">💬</span><span>Chat with Pastor Joseph</span></a>
+    <a class="whatsapp-fab" id="whatsappFab" href="#" data-external aria-label="Chat with Pastor Joseph on WhatsApp" title="Chat with Pastor Joseph on WhatsApp"><span aria-hidden="true">💬</span><span>Chat with Pastor Joseph</span></a>
     <button class="prayer-fab" data-route="form/prayer" type="button">🙏 Prayer Request</button>
   </div>
   <nav class="bottom-nav" aria-label="Mobile navigation">
@@ -101,8 +101,8 @@ $testing = ($cfg['environment'] ?? 'testing') !== 'production';
   <div id="toast" hidden style="position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:160;background:#062451;color:#fff;padding:10px 14px;border-radius:999px;box-shadow:var(--shadow)"></div>
 
   <div class="modal" id="donateModal"><div class="modal-card" id="donateContent"></div></div>
+  <div class="modal" id="discardModal"><div class="modal-card"><h2>Leave this form?</h2><p>You have already started filling this form in. If you leave now, what you have typed will not be saved or sent to the church.</p><div class="modal-actions"><button class="btn btn-primary" id="keepEditing" type="button">Keep Editing</button><button class="btn btn-danger" id="discardForm" type="button">Discard Form</button></div></div></div>
   <div class="modal" id="installModal"><div class="modal-card"><h2>Install or save RCCG Open Heavens Fife</h2><div id="installHelp"></div><div class="modal-actions"><button class="btn" id="closeInstall">Close</button></div></div></div>
-  <div class="modal" id="discardFormModal" aria-hidden="true"><div class="modal-card"><h2>Discard this form?</h2><p>Your information has not been submitted. You can keep editing or discard what you entered and return to the WebApp.</p><div class="modal-actions"><button class="btn" id="keepEditingForm" type="button">Keep Editing</button><button class="btn btn-danger" id="discardFormNow" type="button">Discard Form</button></div></div></div>
   <div class="modal" id="signupModal"><div class="modal-card"><h2>Stay connected with RCCG Open Heavens Fife</h2><p>Receive important church updates. Verify your email to keep this browser recognised.</p><form id="signupForm" class="form-grid"><input id="signupWebsite" name="company" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px"><input id="signupStarted" type="hidden"><div class="field"><label for="signupEmail">Email address</label><input id="signupEmail" type="email" required></div><button class="btn btn-primary" type="submit">Continue</button><p id="signupStatus" class="status" aria-live="polite"></p></form><div class="modal-actions"><button class="btn" id="signupClose">Not now</button></div></div></div>
 </div>
 <script src="assets/app.js?v=9" defer></script>
