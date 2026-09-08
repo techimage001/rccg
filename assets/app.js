@@ -6,29 +6,12 @@
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmtDate=d=>new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(d+'T12:00:00'));
   const fmtDateTime=d=>new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}).format(new Date(d));
-  async function json(url,opts){
-    const r=await fetch(url,opts);
-    let j;
-    try{j=await r.json()}catch{throw new Error('The server returned an unexpected response.');}
-    if(!r.ok)throw new Error(j?.message||'Request failed.');
-    return j;
-  }
+  async function json(url,opts){const r=await fetch(url,opts);const j=await r.json().catch(()=>({ok:false,message:'Unexpected server response.'}));if(!r.ok&&!j.message)j.message='Request failed.';return j}
 
   async function init(){
     if(!location.hash || location.hash==='#') history.replaceState(null,'',location.pathname+location.search+'#/home');
     bindGlobal();
-    try{
-      const content=await json(API+'content.php');
-      if(!content?.ok)throw new Error(content?.message||'Church data could not be loaded.');
-      state.content=content;
-      state.dataError='';
-      renderDynamic();
-    }catch(e){
-      state.content=null;
-      state.dataError=e?.message||'Church data could not be loaded.';
-      renderDataLoadError(state.dataError);
-      renderOfflineFallback();
-    }
+    try{state.content=await json(API+'content.php');if(!state.content?.ok)throw new Error(state.content?.message||'Private content unavailable');renderDynamic();}catch(e){renderConnectionError(e)}
     await updateSignupState();
     route(location.hash.replace('#/','')||'home',false);
     startSignupTimer();registerSW();
@@ -73,20 +56,9 @@
   }
   function basePage(name){if(name.startsWith('discovery'))return'discovery';if(name.startsWith('form/'))return'forms';return name}
 
-  function dataErrorHtml(message,colspan=1){
-    const text=esc(message||'Church data could not be loaded.');
-    const box=`<div class="empty"><strong>Church data could not be loaded.</strong><br>${text}<br><small>Please refresh after checking that the private RCCG data folder is installed outside public_html.</small></div>`;
-    return colspan>1?`<tr><td colspan="${colspan}">${box}</td></tr>`:box;
-  }
-  function renderDataLoadError(message){
-    const targets=[['#quickGrid',1],['#nextAtChurch',1],['#eventsList',1],['#serviceTimes',1],['#churchInfo',1],['#lessonToc',3]];
-    for(const [selector,cols] of targets){const el=$(selector);if(el)el.innerHTML=dataErrorHtml(message,cols);}
-    const st=$('#lessonFilterStatus');if(st)st.textContent='Teacher Manual data is unavailable until the private data connection is restored.';
-  }
-
   function renderDynamic(){
     const c=state.content;if(!c?.ok)return;
-    renderHomeTiles();renderNext();renderChurchInfo();setQuickLinks();renderManualYear();
+    renderHomeTiles();renderNext();renderChurchInfo();setQuickLinks();renderConnectLinks();renderManualYear();
   }
 
   function setQuickLinks(){
@@ -95,35 +67,23 @@
     if(wa){
       const a=$('#whatsappFab');
       if(a){
-        const msg=encodeURIComponent("Hello Pastor Joseph, I'm contacting you from the RCCG Open Heavens Fife WebApp.");
+        const pastor=s.pastor_name||'Pastor';const msg=encodeURIComponent(`Hello ${pastor}, I'm contacting you from the RCCG Open Heavens Fife WebApp.`);
         a.href='https://wa.me/'+wa+'?text='+msg;
       }
     }
   }
 
   function renderHomeTiles(){
-    const serviceTiles=(state.content?.quick_access_services||[]).map(x=>[
-      x.icon||'🕒',
-      x.title||'Church activity',
-      x.schedule_label||'See current schedule',
-      x.join_url||'whats-on',
-      x.join_url?'external':'route'
-    ]);
-    const tiles=[
-      ['🎓','Discovery Class Teacher Manual','Sunday School lessons','discovery'],
-      ...serviceTiles,
-      ['👋','First-Time Worshipper','Tell us about your visit','form/worshipper'],
-      ['📅',"What's On",'Upcoming church activities','whats-on'],
-      ['🕒','Service Times','Current church service schedule','service-times'],
-      ['🙏','Prayer Request','Send a prayer request','form/prayer'],
-      ['👤','Pastor Joseph','Send a private message','form/pastor'],
-      ['🤝','Join a Ministry','Serve in the church','form/ministry'],
-      ['❤️','Sponsor a Child','Send sponsorship interest','form/sponsorship'],
-      ['💡','Suggestion','Share an idea with us','form/suggestion'],
-      ['📍','Contact & Join','Church details and links','contact']
-    ];
-    const g=$('#quickGrid');if(g)g.innerHTML=tiles.map(([i,t,s,r,kind='route'])=>kind==='external'?`<a class="card tile" href="${esc(r)}" data-external><span class="tile-icon">${i}</span><strong>${esc(t)}</strong><small>${esc(s)}</small><span class="arrow">Join →</span></a>`:`<a class="card tile" href="#/${r}" data-route="${r}"><span class="tile-icon">${i}</span><strong>${esc(t)}</strong><small>${esc(s)}</small><span class="arrow">Open →</span></a>`).join('');
+    const tiles=state.content?.quick_access||[];const g=$('#quickGrid');if(!g)return;
+    g.innerHTML=tiles.map(t=>{const inner=`<span class="tile-icon">${esc(t.icon||'')}</span><strong>${esc(t.title)}</strong><small>${esc(t.subtitle||'')}</small><span class="arrow">${esc(t.button_label||'Open')} →</span>`;if(t.external_url)return `<a class="card tile" href="${esc(t.external_url)}" data-external>${inner}</a>`;return `<a class="card tile" href="#/${esc(t.route)}" data-route="${esc(t.route)}">${inner}</a>`;}).join('');
   }
+
+  function renderConnectLinks(){
+    const forms=state.content?.forms||{};const entries=Object.entries(forms).filter(([,f])=>f.show_in_nav).sort((a,b)=>(a[1].nav_order||0)-(b[1].nav_order||0));
+    const make=cls=>entries.map(([key,f])=>`<a class="${cls}" data-route="form/${esc(key)}" href="#/form/${esc(key)}">${esc(f.icon||'✉')} ${esc(f.title||key)}</a>`).join('');
+    const side=$('#sideConnectLinks');if(side)side.innerHTML=make('side-link');const drawer=$('#drawerConnectLinks');if(drawer)drawer.innerHTML=make('drawer-link');
+  }
+
   function renderNext(){
     const el=$('#nextAtChurch');if(!el||!state.content)return;
     const now=state.content.server_now?new Date(state.content.server_now):new Date();
@@ -157,7 +117,6 @@
     return [start.toISOString().slice(0,10),end.toISOString().slice(0,10)];
   }
   function renderDiscovery(){
-    if(state.dataError&&!state.content){const toc=$('#lessonToc');if(toc)toc.innerHTML=dataErrorHtml(state.dataError,3);return;}
     const all=(state.content?.discovery_lessons||[]).slice().sort((a,b)=>isoDay(a.lesson_date).localeCompare(isoDay(b.lesson_date)));
     const today=isoDay(state.content?.server_now||new Date().toISOString());
     const [weekStart,weekEnd]=weekBounds(today);
@@ -214,48 +173,40 @@
   }
 
   function renderEvents(){
-    const el=$('#eventsList');if(!el)return;if(state.dataError&&!state.content){el.innerHTML=dataErrorHtml(state.dataError);return;}if(!state.content)return;
+    const el=$('#eventsList');if(!el||!state.content)return;
     const currentMonth=(state.content?.server_now||new Date().toISOString()).slice(0,7);if(!state.eventMonth)state.eventMonth=currentMonth;
     const monthInput=$('#eventMonth');if(monthInput){monthInput.value=state.eventMonth;monthInput.onchange=()=>{state.eventMonth=monthInput.value||currentMonth;renderEvents();};}
     const shiftMonth=delta=>{const [y,m]=state.eventMonth.split('-').map(Number);const d=new Date(Date.UTC(y,m-1+delta,1));state.eventMonth=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;renderEvents();};
     if($('#eventPrevMonth'))$('#eventPrevMonth').onclick=()=>shiftMonth(-1);if($('#eventNextMonth'))$('#eventNextMonth').onclick=()=>shiftMonth(1);if($('#eventThisMonth'))$('#eventThisMonth').onclick=()=>{state.eventMonth=currentMonth;renderEvents();};
     const events=(state.content.events||[]).filter(e=>String(e.start_at||'').slice(0,7)===state.eventMonth).slice().sort((a,b)=>new Date(a.start_at)-new Date(b.start_at));const st=state.content.settings||{};
-    el.innerHTML=events.map(e=>{const live=Number(e.show_live_links||0)===1?`<div class="sunday-live"><strong>Join us live</strong>${st.facebook?`<a class="btn btn-facebook" data-external href="${esc(st.facebook)}">Facebook Live ↗</a>`:''}${st.youtube?`<a class="btn btn-youtube" data-external href="${esc(st.youtube)}">YouTube Live ↗</a>`:''}</div>`:'';return `<article class="card"><div class="eyebrow" style="color:var(--blue)">${fmtDateTime(e.start_at)}</div><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${e.location?`<p>📍 ${esc(e.location)}</p>`:''}${e.join_url?`<a data-external class="btn btn-primary" href="${esc(e.join_url)}">Join / Open ↗</a>`:''}${live}</article>`;}).join('')||'<div class="empty">No church activities are scheduled for this month.</div>';
+    el.innerHTML=events.map(e=>{const live=(e.facebook_live||e.youtube_live)?`<div class="sunday-live"><strong>Join us live on Sunday</strong>${e.facebook_live&&st.facebook?`<a class="btn btn-facebook" data-external href="${esc(st.facebook)}">Facebook Live ↗</a>`:''}${e.youtube_live&&st.youtube?`<a class="btn btn-youtube" data-external href="${esc(st.youtube)}">YouTube Live ↗</a>`:''}</div>`:'';return `<article class="card"><div class="eyebrow" style="color:var(--blue)">${fmtDateTime(e.start_at)}</div><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${e.location?`<p>📍 ${esc(e.location)}</p>`:''}${e.join_url?`<a data-external class="btn btn-primary" href="${esc(e.join_url)}">Join / Open ↗</a>`:''}${live}</article>`;}).join('')||'<div class="empty">No church activities are scheduled for this month.</div>';
   }
 
   function renderServiceTimes(){
-    const el=$('#serviceTimes');if(!el)return;if(state.dataError&&!state.content){el.innerHTML=dataErrorHtml(state.dataError);return;}const rows=state.content?.service_times||[],tz=state.content?.timezone||'';
-    el.innerHTML=`<div class="timezone-note">🕒 Service times use the church's configured local timezone${tz?` (<strong>${esc(tz)}</strong>)`:''} and automatically follow local clock changes.</div>`+rows.map(r=>`<div class="card"><strong>${esc(r.day_label)} · ${esc(r.time_label)}</strong><p>${esc(r.service_name)}</p>${r.note?`<small>${esc(r.note)}</small>`:''}</div>`).join('');
+    const el=$('#serviceTimes');if(!el)return;const rows=state.content?.service_times||[],tz=state.content?.timezone||'Europe/London';
+    el.innerHTML=`<div class="timezone-note">🕒 Service times use ${esc(tz)} and automatically follow local clock changes.</div>`+rows.map(r=>`<div class="card"><strong>${esc(r.day_label)} · ${esc(r.time_label)}</strong><p>${esc(r.service_name)}</p>${r.note?`<small>${esc(r.note)}</small>`:''}</div>`).join('');
   }
   function renderChurchInfo(){
-    const el=$('#churchInfo');if(!el)return;if(state.dataError&&!state.content){el.innerHTML=dataErrorHtml(state.dataError);return;}const s=state.content?.settings||{},phone=s.phone||'',display=s.phone_display||phone,wa=(s.whatsapp||'').replace(/\D/g,'');
-    const serviceCards=(state.content?.contact_services||[]).map(x=>`<div class="card"><h3>${esc(x.icon||'🕒')} ${esc(x.title||'Online service')}</h3>${x.schedule_label?`<p>${esc(x.schedule_label)}</p>`:''}${x.join_url?`<a class="btn btn-primary" data-external href="${esc(x.join_url)}">Join / Open ↗</a>`:''}</div>`).join('');
-    el.innerHTML=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))"><div class="card"><h3>📞 Call Us</h3><p>${esc(display)}</p>${phone?`<a class="btn btn-primary" href="tel:${esc(phone)}">Call now</a>`:''}</div><div class="card"><h3>💬 WhatsApp Us</h3><p>${esc(display)}</p>${wa?`<a class="btn btn-primary" data-external href="https://wa.me/${esc(wa)}">Open WhatsApp ↗</a>`:''}</div><div class="card"><h3>📍 Visit Us</h3><p>${esc(s.address||'')}</p></div><div class="card"><h3>🌐 Website</h3><p>${esc(s.website||'')}</p>${s.website?`<a class="btn btn-website" data-external href="${esc(s.website)}">Open website ↗</a>`:''}</div><div class="card"><h3>Facebook</h3><p>RCCG Open Heavens Fife</p>${s.facebook?`<a class="btn btn-facebook" data-external href="${esc(s.facebook)}">Open Facebook ↗</a>`:''}</div><div class="card"><h3>YouTube</h3><p>Church channel</p>${s.youtube?`<a class="btn btn-youtube" data-external href="${esc(s.youtube)}">Open YouTube ↗</a>`:''}</div>${serviceCards}</div>`;
+    const el=$('#churchInfo');if(!el)return;const cards=state.content?.contact_cards||[];
+    el.innerHTML=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${cards.map(c=>{let href='';if(c.action_type==='tel')href='tel:'+String(c.value||'');else if(c.action_type==='whatsapp')href='https://wa.me/'+String(c.value||'').replace(/[^0-9]/g,'');else if(c.action_type==='external')href=String(c.value||'');const button=href&&c.button_label?`<a class="btn ${esc(c.button_class||'')}" ${c.action_type==='tel'?'':'data-external'} href="${esc(href)}">${esc(c.button_label)}</a>`:'';return `<div class="card"><h3>${esc(c.icon||'')} ${esc(c.title)}</h3><p>${esc(c.subtitle||'')}</p>${c.display_value?`<p>${esc(c.display_value)}</p>`:''}${button}</div>`;}).join('')}</div>`;
   }
 
-  function formConfig(type){
-    const configs={
-      suggestion:{title:'Send a Suggestion',category:'Suggestion category',options:['Church service','Website / WebApp','Youth','Children','Discovery Class','Bible Study','Evangelism','Other']},
-      pastor:{title:'Send Pastor Joseph a Message',category:'Reason',options:['Prayer','Spiritual guidance','Family','Marriage','Salvation','Baptism','Bereavement','Membership','Personal matter','Other']},
-      prayer:{title:'Prayer Request',category:'Privacy',options:['Private prayer request','May be shared with prayer team']},
-      ministry:{title:'Join a Ministry in the Church',category:'Ministry',options:(state.content?.ministries||[]).map(x=>x.name).concat(['Other'])},
-      sponsorship:{title:'Sponsor a Child',category:'Type of support',options:['Regular sponsorship','Education support','School supplies','Clothing / essentials','One-off support','More information']},
-      general:{title:'Contact RCCG Open Heavens Fife',category:'Reason',options:['General enquiry','Feedback','Content correction','Other']}
-    };return configs[type]||configs.general;
+  function formConfig(type){return state.content?.forms?.[type]||null;}
+  function formOptions(field){let opts=(field.options||[]).slice();if(field.options_source==='ministries')opts=(state.content?.ministries||[]).map(x=>x.name);if(field.append_options)opts=opts.concat(field.append_options);return opts;}
+  function fieldHtml(field,i){const id='f_'+i+'_'+field.name,req=field.required?' required':'',max=field.maxlength?` maxlength="${Number(field.maxlength)}"`:'',help=field.help?` <span class="help">(${esc(field.help)})</span>`:'';
+    if(field.type==='textarea')return `<div class="field"><label for="${id}">${esc(field.label)}${field.required?' *':''}${help}</label><textarea id="${id}" name="${esc(field.name)}"${req}${max}></textarea></div>`;
+    if(field.type==='select'){const opts=formOptions(field);return `<div class="field"><label for="${id}">${esc(field.label)}${field.required?' *':''}</label><select id="${id}" name="${esc(field.name)}"${req}><option value="">Choose one</option>${opts.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></div>`;}
+    if(field.type==='radio'){const opts=field.options||[],labs=field.option_labels||opts;return `<fieldset class="field"><legend>${esc(field.label)}${field.required?' *':''}</legend><div class="choice-row">${opts.map((x,n)=>`<label><input type="radio" name="${esc(field.name)}" value="${esc(x)}"${req}> ${esc(labs[n]??x)}</label>`).join('')}</div></fieldset>`;}
+    if(field.type==='rating'){const min=Number(field.min||1),maxn=Number(field.max||5);return `<fieldset class="field rating-field"><legend>${esc(field.label)}${field.required?' *':''}</legend><div class="star-rating" role="radiogroup" aria-label="${esc(field.label)}">${Array.from({length:maxn-min+1},(_,k)=>k+min).map(n=>`<label><input type="radio" name="${esc(field.name)}" value="${n}"${req}><span aria-hidden="true">★</span><span class="sr-only">${n} star${n===1?'':'s'}</span></label>`).join('')}</div></fieldset>`;}
+    const type=['email','tel','text'].includes(field.type)?field.type:'text';return `<div class="field"><label for="${id}">${esc(field.label)}${field.required?' *':''}${help}</label><input id="${id}" name="${esc(field.name)}" type="${type}"${req}${max}${field.autocomplete?` autocomplete="${esc(field.autocomplete)}"`:''}></div>`;
   }
   function renderForm(type){
-    if(type==='worshipper'){renderWorshipperForm();return;}
-    const cfg=formConfig(type),el=$('#formHost');if(!el)return;
-    el.innerHTML=`<div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / ${esc(cfg.title)}</div><h1 class="page-title">${esc(cfg.title)}</h1><p class="lede">Complete the form and submit it securely. Contacting the church does not add you to the subscriber list.</p><form id="contactForm" class="card form-grid" method="post" action="api/contact.php"><input type="hidden" name="form_type" value="${esc(type)}"><input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true"><input type="hidden" name="started" value="${Date.now()-5000}"><div class="field"><label for="cfName">Full Name *</label><input id="cfName" name="name" required maxlength="80"></div><div class="form-grid two"><div class="field"><label for="cfEmail">Email Address *</label><input id="cfEmail" name="email" type="email" required maxlength="160"></div><div class="field"><label for="cfPhone">Phone Number *</label><input id="cfPhone" name="phone" type="tel" required maxlength="40"></div></div><div class="field"><label for="cfCategory">${esc(cfg.category)} *</label><select id="cfCategory" name="category" required><option value="">Choose one</option>${cfg.options.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div class="field"><label for="cfMessage">Message *</label><textarea id="cfMessage" name="message" required maxlength="3000"></textarea></div><button class="btn btn-primary" type="submit">Submit</button><p id="contactStatus" class="status" aria-live="polite"></p></form>`;
-    $('#contactForm').addEventListener('submit',submitContact);
+    const cfg=formConfig(type),el=$('#formHost');if(!el)return;if(!cfg){el.innerHTML='<div class="empty">This form is not available right now.</div>';return;}
+    const hidden=cfg.endpoint==='api/contact.php'?`<input type="hidden" name="form_type" value="${esc(type)}">`:'';
+    el.innerHTML=`<div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / ${esc(cfg.title)}</div><h1 class="page-title">${esc(cfg.icon||'')} ${esc(cfg.title)}</h1><p class="lede">${esc(cfg.description||'')}</p><form id="dynamicForm" class="card form-grid" method="post" action="${esc(cfg.endpoint)}">${hidden}<input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true"><input type="hidden" name="started" value="${Date.now()-5000}">${(cfg.fields||[]).map(fieldHtml).join('')}<button class="btn btn-primary" type="submit">Submit</button><p id="formStatus" class="status" aria-live="polite"></p></form>`;
+    $('#dynamicForm').addEventListener('submit',submitDynamicForm);$$('.star-rating input').forEach(r=>r.addEventListener('change',()=>{$$('.star-rating label').forEach((label,i)=>label.classList.toggle('chosen',i<Number(r.value)));}));
   }
-  function renderWorshipperForm(){
-    const el=$('#formHost');if(!el)return;
-    el.innerHTML=`<div class="breadcrumb"><a href="#/home" data-route="home">Home</a> / First-Time Worshipper</div><h1 class="page-title">👋 First-Time Worshipper</h1><p class="lede">Thank you for worshipping with us. We would love to hear about your visit. This form is separate from the mailing list.</p><form id="worshipperForm" class="card form-grid" method="post" action="api/visit.php"><input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true"><input type="hidden" name="started" value="${Date.now()-5000}"><div class="field"><label for="fwName">Full Name *</label><input id="fwName" name="name" required maxlength="80"></div><div class="form-grid two"><div class="field"><label for="fwEmail">Email Address *</label><input id="fwEmail" name="email" type="email" required maxlength="160"></div><div class="field"><label for="fwPhone">Phone Number *</label><input id="fwPhone" name="phone" type="tel" required maxlength="40"></div></div><div class="field"><label for="fwAddress">Address <span class="help">(optional)</span></label><input id="fwAddress" name="address" maxlength="240" autocomplete="street-address"></div><div class="field"><label for="fwPrayer">Prayer Point</label><textarea id="fwPrayer" name="prayer_point" maxlength="2000"></textarea></div><fieldset class="field rating-field"><legend>How was your experience? *</legend><div class="star-rating" role="radiogroup" aria-label="How was your experience?">${[1,2,3,4,5].map(n=>`<label><input type="radio" name="rating" value="${n}" required><span aria-hidden="true">★</span><span class="sr-only">${n} star${n===1?'':'s'}</span></label>`).join('')}</div></fieldset><div class="field"><label for="fwSuggestion">Suggestion for Improvement</label><textarea id="fwSuggestion" name="suggestion" maxlength="2000"></textarea></div><fieldset class="field"><legend>May we contact you? *</legend><div class="choice-row"><label><input type="radio" name="may_contact" value="yes" required> Yes</label><label><input type="radio" name="may_contact" value="no" required> No</label></div></fieldset><button class="btn btn-primary" type="submit">Submit</button><p id="worshipperStatus" class="status" aria-live="polite"></p></form>`;
-    $('#worshipperForm').addEventListener('submit',submitWorshipper);$$('.star-rating input').forEach(r=>r.addEventListener('change',()=>{$$('.star-rating label').forEach((label,i)=>label.classList.toggle('chosen',i<Number(r.value)));}));
-  }
-  async function submitWorshipper(e){e.preventDefault();const f=e.currentTarget,s=$('#worshipperStatus');s.textContent='Sending…';const fd=new FormData(f);try{const j=await fetch(f.action,{method:'POST',body:fd,headers:{Accept:'application/json'}}).then(r=>r.json());s.textContent=j.message||'Submitted.';if(j.ok){f.reset();$$('.star-rating label').forEach(label=>label.classList.remove('chosen'));}}catch{s.textContent='We could not submit this right now. Please try again.'}}
-  async function submitContact(e){e.preventDefault();const f=e.currentTarget,s=$('#contactStatus');s.textContent='Sending…';const fd=new FormData(f);try{const j=await fetch(f.action,{method:'POST',body:fd,headers:{Accept:'application/json'}}).then(r=>r.json());s.textContent=j.message||'Submitted.';if(j.ok)f.reset()}catch{s.textContent='We could not submit this right now. Please try again.'}}
+  async function submitDynamicForm(e){e.preventDefault();const f=e.currentTarget,s=$('#formStatus');s.textContent='Sending…';const fd=new FormData(f);try{const r=await fetch(f.action,{method:'POST',body:fd,headers:{Accept:'application/json'}});const j=await r.json();s.textContent=j.message||'Submitted.';if(j.ok){f.reset();$$('.star-rating label').forEach(label=>label.classList.remove('chosen'));}}catch{s.textContent='We could not submit this right now. Please try again.'}}
 
   function openDonate(){
     const d=state.content?.donation||{},refs=state.content?.donation_refs||[],host=$('#donateContent');
@@ -303,6 +254,13 @@
   $('#signupClose')?.addEventListener('click',()=>$('#signupModal').classList.remove('open'));
   $('#signupForm')?.addEventListener('submit',async e=>{e.preventDefault();const s=$('#signupStatus');s.textContent='Sending verification link…';const body={email:$('#signupEmail').value,ts:Number($('#signupStarted').value),website:$('#signupWebsite').value,page:location.href};try{const j=await json(API+'subscribe.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});s.textContent=j.message||''}catch{s.textContent='Could not start verification. Please try again.'}});
 
-  function renderOfflineFallback(){const cached=store.get('offline_lessons',{});if(Object.keys(cached).length){state.content={ok:true,discovery_lessons:Object.values(cached).map(x=>x.meta).filter(Boolean),events:[],service_times:[],settings:{phone:'+447955527798',whatsapp:'447955527798'},donation:{},donation_refs:[],active_manual_year:'offline',manual_years:['offline'],timezone:'Europe/London'};renderDiscovery();setQuickLinks()}}
+  function renderConnectionError(err){
+    state.content={ok:false,discovery_lessons:[],events:[],service_times:[],settings:{},quick_access:[],contact_cards:[],forms:{},manual_years:[]};
+    const msg='The private church content could not be loaded. Please confirm the rccg_fife_private folder is installed beside public_html.';
+    const q=$('#quickGrid');if(q)q.innerHTML=`<div class="card" style="grid-column:1/-1"><strong>Content connection error</strong><p>${esc(msg)}</p></div>`;
+    const n=$('#nextAtChurch');if(n)n.innerHTML=`<div class="empty">${esc(msg)}</div>`;
+    const toc=$('#lessonToc');if(toc)toc.innerHTML=`<tr><td colspan="3"><div class="empty">${esc(msg)}</div></td></tr>`;
+    console.error(err);
+  }
   document.addEventListener('DOMContentLoaded',init);
 })();

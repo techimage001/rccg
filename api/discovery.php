@@ -14,7 +14,7 @@ foreach(($manifest['lessons']??[]) as $l){if((int)($l['lesson_number']??0)===$nu
 if(!$meta) api_json(['ok'=>false,'message'=>'Lesson not found in this manual year.'],404);
 $file=$root.'/'.$year.'/'.$type.'/lesson-'.str_pad((string)$num,2,'0',STR_PAD_LEFT).'.json';
 if(!file_exists($file)){
-  api_json(['ok'=>true,'available'=>false,'manual_type'=>$type,'lesson'=>$meta,'message'=>'Discovery Class Teacher Manual content has not yet been loaded into the private '.$year.' folder. The lesson date and title are verified.']);
+  api_json(['ok'=>true,'available'=>false,'manual_type'=>$type,'lesson'=>$meta,'message'=>'Teacher Manual content has not yet been loaded into the private '.$year.' folder. The lesson date and title are verified.']);
 }
 $data=json_decode((string)file_get_contents($file),true);
 if(!is_array($data)) api_json(['ok'=>false,'message'=>'The lesson content file is invalid JSON.'],500);

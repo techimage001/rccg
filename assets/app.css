@@ -74,11 +74,8 @@ button:disabled{cursor:not-allowed;opacity:.52}
 @media(max-width:640px){.lesson-filters .btn{flex:1 1 calc(50% - 8px);min-width:0}.first-visit-callout .btn{width:100%}.star-rating{justify-content:space-between}.star-rating span[aria-hidden=true]{width:46px;height:46px}}
 .star-rating label.chosen span[aria-hidden=true]{color:#d49b00;border-color:#d49b00;background:#fff8db}
 
-/* External brand buttons */
-.btn-website{background:#fff;color:var(--blue-2);border-color:var(--blue-2)}
-.btn-website:hover,.btn-website:focus-visible{background:#eef5ff;color:var(--blue-2);border-color:var(--blue-2)}
-.btn-facebook{background:#1877f2;color:#fff;border-color:#1877f2}
-.btn-facebook:hover,.btn-facebook:focus-visible{background:#0f68d8;color:#fff;border-color:#0f68d8}
-.btn-youtube{background:#ff0000;color:#fff;border-color:#ff0000}
-.btn-youtube:hover,.btn-youtube:focus-visible{background:#d90000;color:#fff;border-color:#d90000}
-
+/* v8 branded external buttons */
+.btn-facebook{background:#1877F2!important;color:#fff!important;border-color:#1877F2!important}
+.btn-youtube{background:#FF0000!important;color:#fff!important;border-color:#FF0000!important}
+.btn-website{background:#fff!important;color:#0a4dbf!important;border-color:#0a4dbf!important}
+.btn-whatsapp{background:#25D366!important;color:#fff!important;border-color:#25D366!important}
