@@ -9,67 +9,94 @@ $today=$now->format('Y-m-d');
 
 $services=$DB->query('SELECT * FROM service_times WHERE active=1 ORDER BY sort_order,id')->fetchAll();
 $dbEvents=$DB->query('SELECT * FROM events WHERE active=1 ORDER BY start_at ASC')->fetchAll();
+$rules=[];
+try { $rules=$DB->query('SELECT * FROM recurring_events WHERE active=1 ORDER BY sort_order,id')->fetchAll(); } catch (Throwable $e) { $rules=[]; }
 $mins=$DB->query('SELECT * FROM ministries WHERE active=1 ORDER BY name')->fetchAll();
 $refs=$DB->query('SELECT * FROM donation_refs WHERE active=1 ORDER BY sort_order,id')->fetchAll();
 
 function nthWeekdayOfMonth(DateTimeImmutable $d): int { return intdiv(((int)$d->format('j'))-1,7)+1; }
-function lastSundayOfMonth(DateTimeImmutable $d): bool { return $d->format('N')==='7' && $d->modify('+7 days')->format('n')!==$d->format('n'); }
+function lastWeekdayOfMonth(DateTimeImmutable $d): bool { return $d->modify('+7 days')->format('n')!==$d->format('n'); }
 function isoLocal(DateTimeImmutable $d): string { return $d->format('Y-m-d\TH:i:sP'); }
+function parseWeekdays(string $value): array {
+  $out=[];
+  foreach(explode(',',$value) as $part){
+    $n=(int)trim($part);
+    if($n>=1 && $n<=7) $out[$n]=true;
+  }
+  return array_keys($out);
+}
+function atLocalTime(DateTimeImmutable $day,string $time): DateTimeImmutable {
+  $parts=explode(':',$time);
+  $h=(int)($parts[0]??0);$m=(int)($parts[1]??0);$s=(int)($parts[2]??0);
+  return $day->setTime($h,$m,$s);
+}
+function resolveSetting(array $settings,string $settingKey,string $literal=''): string {
+  if($settingKey!=='' && array_key_exists($settingKey,$settings)) return (string)$settings[$settingKey];
+  return $literal;
+}
 
-// Generate a rolling multi-year church calendar in Europe/London so BST/GMT changes are automatic.
-// One year of history plus two years ahead lets the month picker browse well beyond the current month.
+// All RCCG-specific recurring schedule values live in the private SQLite database.
+// This public endpoint contains only a generic recurrence renderer.
 $regular=[];
 for($i=-365;$i<=730;$i++){
   $day=$now->setTime(0,0)->modify(($i>=0?'+':'').$i.' days');
-  if($day->format('N')==='3'){
-    $third=nthWeekdayOfMonth($day)===3;
-    $start=$day->setTime(19,0);
-    $regular[]=[
-      'id'=>'reg-wed-'.$day->format('Ymd'),
-      'title'=>$third?'Prayer Meeting':'Prayer Meeting & Digging Deep',
-      'start_at'=>isoLocal($start),
-      'end_at'=>isoLocal($start->modify('+1 hour')),
-      'description'=>$third?'Prayer Meeting at 19:00. There is no Bible Study on the 3rd Wednesday of the month.':'Prayer Meeting at 19:00 and Digging Deep Bible Study from 19:00–20:00.',
-      'location'=>'Church / Online',
-      'join_url'=>$settings['zoom_url']??'',
-      'featured'=>1,
-      'active'=>1,
-      'source'=>'regular'
-    ];
-  }
-  if($day->format('N')==='7'){
-    $start=$day->setTime(10,30);
-    $regular[]=[
-      'id'=>'reg-sun-'.$day->format('Ymd'),
-      'title'=>'Sunday Services',
-      'start_at'=>isoLocal($start),
-      'end_at'=>isoLocal($day->setTime(13,0)),
-      'description'=>'Morning Prayers 10:30–11:00, Discovery Class 11:00–11:30, Celebration Service / Kids Church 11:30–13:00.',
-      'location'=>$settings['address']??'',
-      'join_url'=>'',
-      'featured'=>1,
-      'active'=>1,
-      'source'=>'regular'
-    ];
-    if(lastSundayOfMonth($day)){
-      $hc=$day->setTime(19,0);
-      $regular[]=[
-        'id'=>'reg-hc-'.$day->format('Ymd'),
-        'title'=>'Holy Communion',
-        'start_at'=>isoLocal($hc),
-        'end_at'=>isoLocal($hc->modify('+1 hour')),
-        'description'=>'Holy Communion on the last Sunday of the month, 19:00–20:00.',
-        'location'=>$settings['address']??'',
-        'join_url'=>'',
-        'featured'=>1,
-        'active'=>1,
-        'source'=>'regular'
-      ];
+  $weekday=(int)$day->format('N');
+  foreach($rules as $rule){
+    $weekdays=parseWeekdays((string)($rule['weekdays']??''));
+    if($weekdays && !in_array($weekday,$weekdays,true)) continue;
+
+    $type=(string)($rule['recurrence_type']??'weekly');
+    if($type==='monthly_last_weekday' && !lastWeekdayOfMonth($day)) continue;
+    if(!in_array($type,['weekly','weekdays','monthly_last_weekday'],true)) continue;
+
+    $title=(string)$rule['title'];
+    $description=(string)($rule['description']??'');
+    $endTime=(string)($rule['end_time']??'');
+    $exceptionNth=(int)($rule['exception_nth']??0);
+    if($exceptionNth>0 && nthWeekdayOfMonth($day)===$exceptionNth){
+      if((string)($rule['exception_title']??'')!=='') $title=(string)$rule['exception_title'];
+      if((string)($rule['exception_description']??'')!=='') $description=(string)$rule['exception_description'];
+      if((string)($rule['exception_end_time']??'')!=='') $endTime=(string)$rule['exception_end_time'];
     }
+
+    $start=atLocalTime($day,(string)$rule['start_time']);
+    $end=$endTime!=='' ? atLocalTime($day,$endTime) : null;
+    $location=resolveSetting($settings,(string)($rule['location_setting']??''),(string)($rule['location_text']??''));
+    $joinUrl=resolveSetting($settings,(string)($rule['join_setting']??''),(string)($rule['join_url']??''));
+
+    $regular[]=[
+      'id'=>'rec-'.($rule['slug']??$rule['id']).'-'.$day->format('Ymd'),
+      'title'=>$title,
+      'start_at'=>isoLocal($start),
+      'end_at'=>$end ? isoLocal($end) : '',
+      'description'=>$description,
+      'location'=>$location,
+      'join_url'=>$joinUrl,
+      'featured'=>(int)($rule['featured']??0),
+      'active'=>1,
+      'source'=>'recurring',
+      'show_live_links'=>(int)($rule['show_live_links']??0)
+    ];
   }
 }
 $events=array_merge($dbEvents,$regular);
 usort($events,fn($a,$b)=>strcmp((string)$a['start_at'],(string)$b['start_at']));
+
+$quickAccessServices=[];$joinableServices=[];$contactServices=[];
+foreach($rules as $rule){
+  $joinUrl=resolveSetting($settings,(string)($rule['join_setting']??''),(string)($rule['join_url']??''));
+  $item=[
+    'slug'=>(string)($rule['slug']??''),
+    'title'=>(string)($rule['title']??''),
+    'icon'=>(string)($rule['quick_icon']??'🕒'),
+    'schedule_label'=>(string)($rule['schedule_label']??''),
+    'join_url'=>$joinUrl,
+    'sort_order'=>(int)($rule['sort_order']??0)
+  ];
+  if((int)($rule['quick_access']??0)===1) $quickAccessServices[]=$item;
+  if($joinUrl!=='') $joinableServices[]=$item;
+  if($joinUrl!=='' && (int)($rule['contact_card']??0)===1) $contactServices[]=$item;
+}
 
 // Discovery Class schedule lives outside public_html in yearly folders.
 $discoveryRoot=$PRIVATE.'/discovery_class';
@@ -109,6 +136,9 @@ api_json([
   'settings'=>$settings,
   'service_times'=>$services,
   'events'=>$events,
+  'quick_access_services'=>$quickAccessServices,
+  'joinable_services'=>$joinableServices,
+  'contact_services'=>$contactServices,
   'discovery_lessons'=>$lessons,
   'manual_years'=>$years,
   'active_manual_year'=>$activeYear,
